@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloud File Manager</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+
+  <!-- AUTH SECTION (Login / Register) -->
+  <div id="authContainer" class="auth-container">
+    <div class="auth-card">
+      <!-- LOGIN FORM -->
+      <div id="loginFormSection">
+        <div class="auth-header">
+          <h1>☁️ Cloud File Manager</h1>
+          <p style="color: var(--text-muted);">Sign in to access your files</p>
+        </div>
+        <form id="loginForm">
+          <div class="form-group">
+            <label>Username or Email</label>
+            <input type="text" id="loginUsername" class="form-control" placeholder="manh or manh@gmail.com" required>
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="loginPassword" class="form-control" placeholder="••••••••" required>
+          </div>
+          <button type="submit" class="btn btn-primary">Sign In</button>
+        </form>
+        <div class="auth-toggle">
+          Don't have an account? <a href="#" id="toggleToRegister">Register</a>
+        </div>
+      </div>
+
+      <!-- REGISTER FORM -->
+      <div id="registerFormSection" class="hidden">
+        <div class="auth-header">
+          <h1>Create Account</h1>
+          <p style="color: var(--text-muted);">Get started with free cloud storage</p>
+        </div>
+        <form id="registerForm">
+          <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" id="regFullName" class="form-control" placeholder="Dao Van Manh" required>
+          </div>
+          <div class="form-group">
+            <label>Username</label>
+            <input type="text" id="regUsername" class="form-control" placeholder="manh" required>
+          </div>
+          <div class="form-group">
+            <label>Email Address</label>
+            <input type="email" id="regEmail" class="form-control" placeholder="manh@gmail.com" required>
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="regPassword" class="form-control" placeholder="••••••••" required minlength="6">
+          </div>
+          <button type="submit" class="btn btn-primary">Register</button>
+        </form>
+        <div class="auth-toggle">
+          Already have an account? <a href="#" id="toggleToLogin">Sign In</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN APP CONTAINER -->
+  <div id="appContainer" class="app-container hidden">
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="brand">
+        <i data-lucide="cloud"></i>
+        <span>Cloud Manager</span>
+      </div>
+
+      <nav class="nav-section">
+        <a class="nav-item active" id="navMyDrive">
+          <i data-lucide="hard-drive"></i>
+          <span>My Drive</span>
+        </a>
+        <!-- <a class="nav-item" id="navSwagger" href="/api-docs" target="_blank">
+          <i data-lucide="file-text"></i>
+          <span>API Docs</span>
+        </a> -->
+      </nav>
+
+      <div class="user-profile-btn" id="openProfileModal">
+        <i data-lucide="user"></i>
+        <div style="flex:1; overflow:hidden;">
+          <div id="userDisplayName" style="font-weight:600; font-size:0.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">User</div>
+          <div id="userDisplayEmail" style="font-size:0.75rem; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">user@email.com</div>
+        </div>
+        <button id="logoutBtn" class="icon-btn" title="Logout">
+          <i data-lucide="log-out"></i>
+        </button>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+      <header class="top-bar">
+        <div class="breadcrumb" id="breadcrumbNav">
+          <span class="breadcrumb-item" id="rootBreadcrumb">My Drive</span>
+        </div>
+
+        <div class="top-actions">
+          <button id="btnCreateFolderModal" class="btn btn-secondary">
+            <i data-lucide="folder-plus"></i> New Folder
+          </button>
+          <button id="btnUploadFileModal" class="btn btn-primary" style="width:auto;">
+            <i data-lucide="upload"></i> Upload File
+          </button>
+        </div>
+      </header>
+
+      <div class="content-body">
+        <!-- FOLDERS SECTION -->
+        <div class="grid-section">
+          <div class="section-title">Folders</div>
+          <div id="folderGrid" class="folder-grid">
+            <!-- Dynamic Folders -->
+          </div>
+        </div>
+
+        <!-- FILES SECTION -->
+        <div class="grid-section">
+          <div class="section-title">Files</div>
+          <table class="file-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Size</th>
+                <th>Uploaded</th>
+                <th style="text-align:right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="fileTableBody">
+              <!-- Dynamic Files -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- CREATE FOLDER MODAL -->
+  <div id="createFolderModal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Create New Folder</h3>
+        <button class="icon-btn closeModalBtn"><i data-lucide="x"></i></button>
+      </div>
+      <form id="createFolderForm">
+        <div class="form-group">
+          <label>Folder Name</label>
+          <input type="text" id="folderNameInput" class="form-control" placeholder="New Folder" required>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary closeModalBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="width:auto;">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- UPLOAD FILE MODAL -->
+  <div id="uploadFileModal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Upload File</h3>
+        <button class="icon-btn closeModalBtn"><i data-lucide="x"></i></button>
+      </div>
+      <form id="uploadFileForm">
+        <div class="form-group">
+          <label>Select File</label>
+          <input type="file" id="fileInput" class="form-control" required>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary closeModalBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="width:auto;">Upload</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- RENAME ITEM MODAL -->
+  <div id="renameModal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="renameModalTitle">Rename Item</h3>
+        <button class="icon-btn closeModalBtn"><i data-lucide="x"></i></button>
+      </div>
+      <form id="renameForm">
+        <input type="hidden" id="renameItemId">
+        <input type="hidden" id="renameItemType"> <!-- 'folder' or 'file' -->
+        <div class="form-group">
+          <label>New Name</label>
+          <input type="text" id="renameInput" class="form-control" required>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary closeModalBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="width:auto;">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- USER PROFILE MODAL -->
+  <div id="profileModal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>User Profile & Security</h3>
+        <button class="icon-btn closeModalBtn"><i data-lucide="x"></i></button>
+      </div>
+      <form id="updateProfileForm" style="margin-bottom: 1.5rem;">
+        <div class="form-group">
+          <label>Full Name</label>
+          <input type="text" id="profileFullName" class="form-control">
+        </div>
+        <button type="submit" class="btn btn-secondary" style="width:100%;">Update Name</button>
+      </form>
+      <hr style="border-color:var(--card-border); margin-bottom:1.5rem;">
+      <form id="changePasswordForm">
+        <div class="form-group">
+          <label>Current Password</label>
+          <input type="password" id="currentPassword" class="form-control" required>
+        </div>
+        <div class="form-group">
+          <label>New Password</label>
+          <input type="password" id="newPassword" class="form-control" required minlength="6">
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%;">Change Password</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
