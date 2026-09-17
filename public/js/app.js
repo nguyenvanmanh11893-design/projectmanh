@@ -227,13 +227,14 @@ document.addEventListener('DOMContentLoaded', () => {
       card.innerHTML = `
         <div class="folder-info">
           <i data-lucide="folder" style="color: var(--accent-blue);"></i>
-          <span class="folder-name">${folder.name}</span>
+          <span class="folder-name"></span>
         </div>
         <div class="action-btns">
           <button class="icon-btn rename-folder-btn" title="Rename"><i data-lucide="edit-2"></i></button>
           <button class="icon-btn delete-folder-btn" title="Delete"><i data-lucide="trash-2"></i></button>
         </div>
       `;
+      card.querySelector('.folder-name').textContent = folder.name;
 
       // Open Folder
       card.addEventListener('click', (e) => {
@@ -279,7 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <td>
           <div class="file-name-cell">
             <i data-lucide="file-text" style="color:var(--accent-blue);"></i>
-            <span>${file.file_name}</span>
+            <span class="file-name"></span>
           </div>
         </td>
         <td>${formattedSize}</td>
@@ -292,6 +293,7 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
         </td>
       `;
+      tr.querySelector('.file-name').textContent = file.file_name;
 
       // Download Presigned URL
       tr.querySelector('.download-file-btn').addEventListener('click', async () => {

@@ -12,13 +12,13 @@ const authenticateToken = async (req, res, next) => {
     const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
 
     if (!token) {
-      return errorResponse(res, 'Access token is missing or invalid', 401);
+      return errorResponse(res, { message: 'Access token is missing or invalid', statusCode: 401, code: 'UNAUTHORIZED' });
     }
 
     const decoded = verifyToken(token);
 
     if (!decoded || !decoded.id) {
-      return errorResponse(res, 'Invalid token payload', 401);
+      return errorResponse(res, { message: 'Invalid token payload', statusCode: 401, code: 'UNAUTHORIZED' });
     }
 
     // Attach decoded user info strictly to req.user
@@ -32,9 +32,9 @@ const authenticateToken = async (req, res, next) => {
     next();
   } catch (error) {
     if (error.name === 'TokenExpiredError') {
-      return errorResponse(res, 'Token has expired. Please log in again.', 401);
+      return errorResponse(res, { message: 'Token has expired. Please log in again.', statusCode: 401, code: 'UNAUTHORIZED' });
     }
-    return errorResponse(res, 'Authentication failed. Invalid token.', 401);
+    return errorResponse(res, { message: 'Authentication failed. Invalid token.', statusCode: 401, code: 'UNAUTHORIZED' });
   }
 };
 

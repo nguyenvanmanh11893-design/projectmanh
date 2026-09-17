@@ -2,32 +2,28 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { File, Folder } from '../models/index.js';
 import * as s3Service from './s3.service.js';
+import { AppError, badRequest } from '../utils/app-error.js';
 
-/**
- * Upload file & save metadata
- */
+const createFileService = ({ FileModel = File, FolderModel = Folder, storage = s3Service } = {}) => {
 const uploadFile = async (userId, { file, folder_id }) => {
   if (!file) {
-    const err = new Error('No file uploaded');
-    err.statusCode = 400;
-    throw err;
+    throw badRequest('No file uploaded');
   }
 
   // Validate folder ownership if folder_id is provided
   if (folder_id) {
-    const folder = await Folder.findOne({
+    const folder = await FolderModel.findOne({
       where: { id: folder_id, user_id: userId }
     });
 
     if (!folder) {
-      const err = new Error('Target folder not found or access denied');
-      err.statusCode = 404;
-      throw err;
+      throw new AppError('Target folder not found or access denied', { statusCode: 404, code: 'NOT_FOUND' });
     }
   }
 
   const fileId = randomUUID();
-  const originalName = file.originalname;
+  const originalName = String(file.originalname || '').trim();
+  if (!originalName || originalName.length > 255) throw badRequest('File name must be between 1 and 255 characters');
   const extension = path.extname(originalName).toLowerCase().replace('.', '');
   const mimeType = file.mimetype || 'application/octet-stream';
   const fileSize = file.size;
@@ -37,18 +33,18 @@ const uploadFile = async (userId, { file, folder_id }) => {
 
   // Upload to Amazon S3
   try {
-    await s3Service.uploadToS3({
+    await storage.uploadToS3({
       buffer: file.buffer,
       key: s3Key,
       mimeType
     });
   } catch (s3Error) {
-    console.warn('[AWS S3 UPLOAD NOTICE]: S3 upload encountered issue (check AWS credentials):', s3Error.message);
-    // Continue saving metadata if testing locally, or rethrow if strict
+    console.error('[S3 UPLOAD FAILED]', s3Error);
+    throw new AppError('File upload failed', { statusCode: 502, code: 'STORAGE_UPLOAD_FAILED' });
   }
 
   // Save metadata to MySQL
-  const newFile = await File.create({
+  const newFile = await FileModel.create({
     id: fileId,
     user_id: userId,
     folder_id: folder_id || null,
@@ -79,7 +75,7 @@ const listFiles = async (userId, folderId = null) => {
     whereClause.folder_id = null; // Root files
   }
 
-  const files = await File.findAll({
+  const files = await FileModel.findAll({
     where: whereClause,
     order: [['created_at', 'DESC']]
   });
@@ -91,7 +87,7 @@ const listFiles = async (userId, folderId = null) => {
  * Generate Presigned Download URL for a file
  */
 const getDownloadUrl = async (userId, fileId) => {
-  const file = await File.findOne({
+  const file = await FileModel.findOne({
     where: {
       id: fileId,
       user_id: userId,
@@ -100,14 +96,12 @@ const getDownloadUrl = async (userId, fileId) => {
   });
 
   if (!file) {
-    const err = new Error('File not found or access denied');
-    err.statusCode = 404;
-    throw err;
+    throw new AppError('File not found or access denied', { statusCode: 404, code: 'NOT_FOUND' });
   }
 
   // Generate S3 presigned URL
   try {
-    const downloadUrl = await s3Service.generatePresignedDownloadUrl({
+    const downloadUrl = await storage.generatePresignedDownloadUrl({
       key: file.s3_key,
       originalName: file.original_name,
       expiresInSeconds: 3600
@@ -120,13 +114,8 @@ const getDownloadUrl = async (userId, fileId) => {
       expires_in: '1 hour'
     };
   } catch (error) {
-    console.warn('[AWS S3 PRESIGNED URL NOTICE]:', error.message);
-    return {
-      file_id: file.id,
-      file_name: file.file_name,
-      download_url: `https://s3.amazonaws.com/${process.env.AWS_S3_BUCKET || 'bucket'}/${file.s3_key}`,
-      expires_in: '1 hour'
-    };
+    console.error('[S3 PRESIGN FAILED]', error);
+    throw new AppError('Download is temporarily unavailable', { statusCode: 502, code: 'STORAGE_PRESIGN_FAILED' });
   }
 };
 
@@ -134,24 +123,19 @@ const getDownloadUrl = async (userId, fileId) => {
  * Rename File
  */
 const renameFile = async (userId, fileId, { file_name }) => {
-  if (!file_name || file_name.trim() === '') {
-    const err = new Error('New file name is required');
-    err.statusCode = 400;
-    throw err;
+  if (typeof file_name !== 'string' || file_name.trim() === '') {
+    throw badRequest('New file name is required');
   }
 
-  const file = await File.findOne({
+  if (file_name.trim().length > 255) throw badRequest('file_name must be no more than 255 characters');
+  const file = await FileModel.findOne({
     where: {
       id: fileId,
       user_id: userId
     }
   });
 
-  if (!file) {
-    const err = new Error('File not found or access denied');
-    err.statusCode = 404;
-    throw err;
-  }
+  if (!file) throw new AppError('File not found or access denied', { statusCode: 404, code: 'NOT_FOUND' });
 
   file.file_name = file_name.trim();
   await file.save();
@@ -163,22 +147,18 @@ const renameFile = async (userId, fileId, { file_name }) => {
  * Move File to another folder or root
  */
 const moveFile = async (userId, fileId, { folder_id }) => {
-  const file = await File.findOne({
+  const file = await FileModel.findOne({
     where: {
       id: fileId,
       user_id: userId
     }
   });
 
-  if (!file) {
-    const err = new Error('File not found or access denied');
-    err.statusCode = 404;
-    throw err;
-  }
+  if (!file) throw new AppError('File not found or access denied', { statusCode: 404, code: 'NOT_FOUND' });
 
   // If folder_id provided, verify target folder exists and belongs to user
   if (folder_id) {
-    const targetFolder = await Folder.findOne({
+    const targetFolder = await FolderModel.findOne({
       where: {
         id: folder_id,
         user_id: userId
@@ -186,9 +166,7 @@ const moveFile = async (userId, fileId, { folder_id }) => {
     });
 
     if (!targetFolder) {
-      const err = new Error('Target folder not found or access denied');
-      err.statusCode = 404;
-      throw err;
+      throw new AppError('Target folder not found or access denied', { statusCode: 404, code: 'NOT_FOUND' });
     }
   }
 
@@ -202,24 +180,21 @@ const moveFile = async (userId, fileId, { folder_id }) => {
  * Delete File from S3 and MySQL
  */
 const deleteFile = async (userId, fileId) => {
-  const file = await File.findOne({
+  const file = await FileModel.findOne({
     where: {
       id: fileId,
       user_id: userId
     }
   });
 
-  if (!file) {
-    const err = new Error('File not found or access denied');
-    err.statusCode = 404;
-    throw err;
-  }
+  if (!file) throw new AppError('File not found or access denied', { statusCode: 404, code: 'NOT_FOUND' });
 
   // Delete from S3
   try {
-    await s3Service.deleteFromS3({ key: file.s3_key });
+    await storage.deleteFromS3({ key: file.s3_key });
   } catch (error) {
-    console.warn('[AWS S3 DELETE NOTICE]:', error.message);
+    console.error('[S3 DELETE FAILED]', error);
+    throw new AppError('File deletion failed; metadata was retained', { statusCode: 502, code: 'STORAGE_DELETE_FAILED' });
   }
 
   // Delete metadata from MySQL
@@ -228,11 +203,17 @@ const deleteFile = async (userId, fileId) => {
   return true;
 };
 
+return { uploadFile, listFiles, getDownloadUrl, renameFile, moveFile, deleteFile };
+};
+
+const { uploadFile, listFiles, getDownloadUrl, renameFile, moveFile, deleteFile } = createFileService();
+
 export {
   uploadFile,
   listFiles,
   getDownloadUrl,
   renameFile,
   moveFile,
-  deleteFile
+  deleteFile,
+  createFileService
 };

@@ -4,20 +4,21 @@ import { errorResponse } from '../utils/response.js';
  * 404 Not Found Middleware
  */
 const notFoundHandler = (req, res, next) => {
-  return errorResponse(res, `Route ${req.originalUrl} not found`, 404);
+  return errorResponse(res, { message: 'Route not found', statusCode: 404, code: 'NOT_FOUND' });
 };
 
 /**
  * Global Centralized Error Handling Middleware
  */
 const errorHandler = (err, req, res, next) => {
-  console.error('[SERVER ERROR]:', err);
+  console.error(`[SERVER ERROR] request_id=${req.requestId || 'unknown'}:`, err);
 
-  // Default status code and error message
-  const statusCode = err.statusCode || 500;
-  const message = err.message || 'Internal Server Error';
+  const statusCode = Number.isInteger(err.statusCode) ? err.statusCode : 500;
+  const isClientError = statusCode >= 400 && statusCode < 500;
+  const message = isClientError ? (err.message || 'Request failed') : 'Internal Server Error';
+  const code = err.code || (isClientError ? 'REQUEST_ERROR' : 'INTERNAL_ERROR');
 
-  return errorResponse(res, message, statusCode, process.env.NODE_ENV === 'development' ? err.stack : null);
+  return errorResponse(res, { message, statusCode, code, details: isClientError ? err.details : null });
 };
 
 export {

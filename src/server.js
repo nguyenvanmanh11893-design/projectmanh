@@ -1,23 +1,20 @@
 import 'dotenv/config';
 import app from './app.js';
 import { testConnection, sequelize } from './config/database.js';
+import { validateConfig } from './config/validate-config.js';
 
 const PORT = process.env.PORT || 3000;
 
 const startServer = async () => {
+  validateConfig();
   // Test Database Connection
   const isDbConnected = await testConnection();
 
-  if (isDbConnected) {
-    try {
-      // Sync models without dropping existing data
-      await sequelize.sync({ alter: false });
-      console.log(' Database models synchronized successfully.');
-    } catch (syncErr) {
-      console.warn(' Database sync warning:', syncErr.message);
-    }
-  } else {
-    console.warn('Server running without active MySQL connection. Ensure XAMPP MySQL is started.');
+  if (!isDbConnected) {
+    console.error('Server not started because MySQL is unavailable.');
+    await sequelize.close().catch(() => {});
+    process.exitCode = 1;
+    return;
   }
 
   const server = app.listen(PORT, () => {

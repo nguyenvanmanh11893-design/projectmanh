@@ -8,6 +8,7 @@ import swaggerSpec from './config/swagger.js';
 
 import { successResponse } from './utils/response.js';
 import { notFoundHandler, errorHandler } from './middleware/error.middleware.js';
+import { requestId } from './middleware/request-id.middleware.js';
 
 // Import Routes
 import authRoutes from './routes/auth.routes.js';
@@ -18,6 +19,7 @@ import fileRoutes from './routes/file.routes.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
+app.use(requestId);
 
 // Security Middlewares
 app.use(helmet({
