@@ -1,5 +1,12 @@
 import * as fileService from '../services/file.service.js';
 import { successResponse } from '../utils/response.js';
+import { AppError } from '../utils/app-error.js';
+
+const legacyUploadRemoved = async (req, res, next) => {
+  res.set('Deprecation', 'true');
+  res.set('Link', '</api/uploads>; rel="successor-version"');
+  next(new AppError('This multipart upload endpoint is deprecated and disabled; use /api/uploads direct S3 upload sessions', { statusCode: 410, code: 'LEGACY_UPLOAD_DEPRECATED' }));
+};
 
 // Upload
 const upload = async (req, res, next) => {
@@ -63,6 +70,7 @@ const remove = async (req, res, next) => {
 };
 
 export {
+  legacyUploadRemoved,
   upload,
   list,
   download,

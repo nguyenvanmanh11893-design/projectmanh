@@ -2,7 +2,39 @@
 
 ## Current phase
 
-**Phase 5A - Quota and upload sessions: implemented (unit/static-test scope).** No MySQL test instance, browser E2E environment, or AWS environment was accessed in this phase.
+**Phase 5B - Direct S3 upload: implemented (unit-test scope).** The Phase 5A MySQL reservation test ran against the configured disposable test database; no Phase 5B migration, AWS S3, or browser E2E environment was run.
+
+## Phase 5B completed
+
+- `POST /api/uploads` now reserves quota and returns a short-lived (maximum five minutes) presigned S3 POST. The server generates `incoming/{user_id}/{upload_id}`; the policy pins the configured bucket, exact key, declared content type, exact declared length through `content-length-range`, and `success_action_status=201`. The browser receives signed fields but does not supply a key or bucket to the API.
+- Added `POST /api/uploads/:id/complete`, which accepts only `versionId`. It HEADs the exact session key and requested version, verifies declared size and content type, then locks and binds the first source version. Repeated or concurrent completion of that same version returns the stored result; a different version returns `409 UPLOAD_VERSION_CONFLICT`.
+- Introduced `UPLOADED` upload-session status via migration `004-phase5b-direct-upload`. It retains reserved quota and explicitly means source version bound and awaiting Phase 6 validation. This phase creates no READY file and never commits quota.
+- Added a small S3 storage adapter with injected presign/HEAD contract for unit tests. No credential fallback, key fallback, or mock production path was added.
+- Disabled `POST /api/files/upload`: it now returns `410 LEGACY_UPLOAD_DEPRECATED` with a successor link before Multer or the legacy S3 writer can run. Keep that response through the Phase 8 client migration, then remove the route and unused legacy upload components after a reviewed client-usage check.
+- Added [S3 direct-upload configuration](S3_DIRECT_UPLOAD.md), including CORS `ExposeHeaders` for `x-amz-version-id`, versioning requirement, POST replay semantics, and adapter contract.
+
+## Phase 5B files changed
+
+- `src/services/{direct-upload.service,s3-storage.adapter,quota.service}.js`, `src/models/UploadSession.js`, `database/migrations/004-phase5b-direct-upload.js` - direct-upload policy/HEAD boundary, atomic source-version binding, expiry handling, and `UPLOADED` state.
+- `src/controllers/upload.controller.js`, `src/routes/upload.routes.js`, `src/middleware/validation.middleware.js`, `src/config/swagger-docs.js` - direct POST response, complete endpoint, strict version-only input, and API documentation.
+- `src/routes/file.routes.js`, `src/controllers/file.controller.js` - legacy multipart upload deprecation/disablement.
+- `.env.example`, `package.json`, `package-lock.json`, `docs/S3_DIRECT_UPLOAD.md`, `test/phase5b.test.js` - short-post configuration, AWS official presigned-POST dependency, S3 CORS/contract documentation, and tests.
+
+## Phase 5B verification
+
+| Command/check | Result |
+| --- | --- |
+| `node --check src/services/quota.service.js src/services/direct-upload.service.js src/services/s3-storage.adapter.js src/controllers/upload.controller.js src/routes/upload.routes.js src/routes/file.routes.js test/phase5b.test.js` | Passed. |
+| `npm test` | Passed: 37 tests, including the enabled existing Phase 5A disposable-MySQL reservation test. Phase 5B additionally covers ownership-before-HEAD, transient HEAD/presign failures, declared-type mismatch, concurrent different-version completion, expiry, and protection against pre-validation quota commit. Expected Phase 1 S3 fault-injection logs and an AWS SDK Node-version warning appeared. |
+| `git diff --check` | Passed. |
+| AWS S3/browser direct-upload E2E | Not run: no AWS bucket/CORS/versioning configuration or browser environment was used. |
+| Phase 5B MySQL complete race/migration | Not run: no explicit migration rehearsal was authorized; the concurrent complete test uses an injected serialized transaction fixture. Run migration 004 and repeat competing same/different-version complete requests against a disposable MySQL database before deployment. |
+
+## Conditions to start Phase 6A
+
+- Rehearse migration `004-phase5b-direct-upload` and the direct-upload completion race against disposable MySQL.
+- Configure a private, versioned S3 bucket with the documented CORS rule and least-privilege signing role; manually verify S3 returns/exposes `x-amz-version-id` for browser POST.
+- Keep complete responses in `UPLOADED`; do not create READY metadata or final object copies until the Phase 6 validator/report contract is approved.
 
 ## Phase 5A completed
 

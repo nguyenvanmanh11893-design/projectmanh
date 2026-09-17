@@ -340,7 +340,7 @@
  *
  * /api/uploads:
  *   post:
- *     summary: Reserve quota and create an upload session (no S3 POST is issued yet)
+ *     summary: Reserve quota and issue a short-lived direct S3 POST contract
  *     tags: [Uploads]
  *     security:
  *       - sessionCookie: []
@@ -361,8 +361,27 @@
  *               declared_mime_type: { type: string, enum: [application/pdf, image/jpeg, image/png, text/plain] }
  *               folder_id: { type: string, nullable: true }
  *     responses:
- *       201: { description: Upload session reserved }
+ *       201: { description: Upload session plus server-selected presigned POST URL and fields }
  *       409: { description: Quota, active-session limit, or idempotency conflict }
+ *
+ * /api/uploads/{id}/complete:
+ *   post:
+ *     summary: Bind one uploaded S3 object version after server-side HEAD verification
+ *     tags: [Uploads]
+ *     security:
+ *       - sessionCookie: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [versionId]
+ *             properties:
+ *               versionId: { type: string, maxLength: 1024 }
+ *     responses:
+ *       200: { description: Version bound and awaiting validation }
+ *       409: { description: Expired session, missing/mismatched object, or version conflict }
  *
  * /api/uploads/{id}:
  *   get:

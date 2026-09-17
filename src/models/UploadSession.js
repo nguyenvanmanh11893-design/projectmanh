@@ -13,7 +13,7 @@ const UploadSession = sequelize.define('UploadSession', {
   declared_mime_type: { type: DataTypes.STRING(100), allowNull: false },
   incoming_key: { type: DataTypes.STRING(500), allowNull: false },
   source_version_id: { type: DataTypes.STRING(1024), allowNull: true },
-  status: { type: DataTypes.ENUM('RESERVED', 'UPLOADING', 'COMPLETED', 'REJECTED', 'EXPIRED', 'CANCELLED'), allowNull: false, defaultValue: 'RESERVED' },
+  status: { type: DataTypes.ENUM('RESERVED', 'UPLOADING', 'UPLOADED', 'COMPLETED', 'REJECTED', 'EXPIRED', 'CANCELLED'), allowNull: false, defaultValue: 'RESERVED' },
   expires_at: { type: DataTypes.DATE, allowNull: false },
   completed_at: { type: DataTypes.DATE, allowNull: true }
 }, { tableName: 'upload_sessions', timestamps: true, underscored: true });

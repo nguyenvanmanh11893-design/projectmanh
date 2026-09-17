@@ -2,15 +2,17 @@ import express from 'express';
 const router = express.Router();
 import * as fileController from '../controllers/file.controller.js';
 import { authenticateToken } from '../middleware/auth.middleware.js';
-import upload from '../middleware/upload.middleware.js';
-import { validateFileList, validateIdParam, validateFileNamePayload, validateMovePayload, validateUploadPayload } from '../middleware/validation.middleware.js';
+import { validateFileList, validateIdParam, validateFileNamePayload, validateMovePayload } from '../middleware/validation.middleware.js';
 import { validateOrigin, requireCsrf } from '../middleware/csrf.middleware.js';
 
 router.use(authenticateToken);
 router.use(validateOrigin);
 router.use(requireCsrf);
 
-router.post('/upload', upload.single('file'), validateUploadPayload, fileController.upload);
+// Phase 5B: disabled before it can bypass quota reservation, exact-version
+// verification, or the future validator. Remove this route in Phase 8 after
+// clients have migrated; the service remains only for legacy maintenance.
+router.post('/upload', fileController.legacyUploadRemoved);
 
 router.get('/', validateFileList, fileController.list);
 router.get('/:id/download', validateIdParam, fileController.download);

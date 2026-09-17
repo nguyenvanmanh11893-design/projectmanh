@@ -82,4 +82,13 @@ const validateUploadSessionPayload = (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-export { isUuid, validateFileList, validateIdParam, validateFolderPayload, validateFileNamePayload, validateMovePayload, validateUploadPayload, validateUploadSessionPayload };
+const validateUploadCompletePayload = (req, res, next) => {
+  try {
+    assertObject(req.body, 'body');
+    if (typeof req.body.versionId !== 'string' || !req.body.versionId.trim() || req.body.versionId.length > 1024) throw badRequest('versionId is required and must be at most 1024 characters');
+    req.body = { versionId: req.body.versionId.trim() };
+    next();
+  } catch (error) { next(error); }
+};
+
+export { isUuid, validateFileList, validateIdParam, validateFolderPayload, validateFileNamePayload, validateMovePayload, validateUploadPayload, validateUploadSessionPayload, validateUploadCompletePayload };
