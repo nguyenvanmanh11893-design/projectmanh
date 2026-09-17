@@ -3,6 +3,10 @@ import { Op } from 'sequelize';
 import { sequelize, Job } from '../models/index.js';
 
 export const FINALIZE_UPLOAD = 'FINALIZE_UPLOAD';
+export const PURGE_FILE = 'PURGE_FILE';
+export const EXPIRE_UPLOAD_SESSION = 'EXPIRE_UPLOAD_SESSION';
+export const RECONCILE = 'RECONCILE';
+export const WORKER_JOB_TYPES = [FINALIZE_UPLOAD, PURGE_FILE, EXPIRE_UPLOAD_SESSION, RECONCILE];
 export const DEFAULT_LEASE_MS = 60_000;
 export const MAX_BACKOFF_MS = 15 * 60_000;
 
@@ -13,11 +17,11 @@ export const retryDelayMs = (attempt, random = Math.random) => {
 };
 
 export const createJobService = ({ sequelizeInstance = sequelize, JobModel = Job, now = () => new Date(), random = Math.random, leaseMs = DEFAULT_LEASE_MS } = {}) => {
-  const claimNext = async (workerId) => sequelizeInstance.transaction(async (transaction) => {
+  const claimFromTypes = async (workerId, types) => sequelizeInstance.transaction(async (transaction) => {
     let current = now();
     const job = await JobModel.findOne({
       where: {
-        type: FINALIZE_UPLOAD,
+        type: types.length === 1 ? types[0] : { [Op.in]: types },
         [Op.or]: [
           { status: 'QUEUED', next_attempt_at: { [Op.lte]: current } },
           { status: 'RUNNING', locked_until: { [Op.lte]: current } }
@@ -44,6 +48,10 @@ export const createJobService = ({ sequelizeInstance = sequelize, JobModel = Job
     await job.save({ transaction });
     return { job: job.get ? job.get({ plain: true }) : { ...job }, leaseToken: token };
   });
+  // Retain the Phase 6B single-type contract for callers/tests that only run
+  // finalization; the worker uses the multi-type variant below.
+  const claimNext = (workerId) => claimFromTypes(workerId, [FINALIZE_UPLOAD]);
+  const claimNextOfTypes = (workerId, types = WORKER_JOB_TYPES) => claimFromTypes(workerId, types);
 
   const finish = async (jobId, leaseToken) => sequelizeInstance.transaction(async (transaction) => {
     const job = await JobModel.findOne({ where: { id: jobId }, transaction, lock: transaction.LOCK.UPDATE });
@@ -65,7 +73,9 @@ export const createJobService = ({ sequelizeInstance = sequelize, JobModel = Job
     const job = await JobModel.findOne({ where: { id: jobId }, transaction, lock: transaction.LOCK.UPDATE });
     if (!job || job.status !== 'RUNNING' || job.lease_token !== leaseToken || !job.locked_until || new Date(job.locked_until) <= now()) return false;
     // SDK/SQL error messages may include signed URLs or SQL bind values.
-    job.last_error = ['InvalidReportError', 'LeaseLostError'].includes(error?.constructor?.name) ? error.constructor.name : 'FINALIZE_ATTEMPT_FAILED';
+    job.last_error = ['InvalidReportError', 'LeaseLostError', 'PartialDeleteError'].includes(error?.constructor?.name)
+      ? error.constructor.name
+      : (job.type === FINALIZE_UPLOAD ? 'FINALIZE_ATTEMPT_FAILED' : 'JOB_ATTEMPT_FAILED');
     job.locked_at = job.locked_until = job.locked_by = job.lease_token = null;
     if (job.attempts >= job.max_attempts) job.status = 'DEAD';
     else {
@@ -76,5 +86,16 @@ export const createJobService = ({ sequelizeInstance = sequelize, JobModel = Job
     return true;
   });
 
-  return { claimNext, finish, fail, renew };
+  const reschedule = async (jobId, leaseToken, runAt, payload) => sequelizeInstance.transaction(async (transaction) => {
+    const job = await JobModel.findOne({ where: { id: jobId }, transaction, lock: transaction.LOCK.UPDATE });
+    if (!job || job.status !== 'RUNNING' || job.lease_token !== leaseToken || !job.locked_until || new Date(job.locked_until) <= now()) return false;
+    job.status = 'QUEUED'; job.attempts = 0; job.last_error = null;
+    job.run_at = job.next_attempt_at = runAt;
+    if (payload !== undefined) job.payload = payload;
+    job.locked_at = job.locked_until = job.locked_by = job.lease_token = null;
+    await job.save({ transaction });
+    return true;
+  });
+
+  return { claimNext, claimNextOfTypes, finish, fail, renew, reschedule };
 };

@@ -46,7 +46,8 @@ const File = sequelize.define('File', {
   s3_version_id: { type: DataTypes.STRING(1024), allowNull: true },
   detected_mime_type: { type: DataTypes.STRING(100), allowNull: true },
   trashed_at: { type: DataTypes.DATE, allowNull: true },
-  purge_requested_at: { type: DataTypes.DATE, allowNull: true }
+  purge_requested_at: { type: DataTypes.DATE, allowNull: true },
+  purged_at: { type: DataTypes.DATE, allowNull: true }
 }, {
   tableName: 'files',
   timestamps: true,

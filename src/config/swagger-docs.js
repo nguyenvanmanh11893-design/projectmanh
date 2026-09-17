@@ -282,7 +282,7 @@
  *       200:
  *         description: File renamed
  *   delete:
- *     summary: Delete file from S3 and MySQL
+ *     summary: Move a ready file to trash (quota is retained)
  *     tags:
  *       - Files
  *     security:
@@ -294,7 +294,62 @@
  *         schema: { type: string }
  *     responses:
  *       200:
- *         description: File deleted
+ *         description: File moved to trash
+ *
+ * /api/files/trash:
+ *   get:
+ *     summary: List trash with cursor pagination
+ *     tags: [Files]
+ *     security:
+ *       - sessionCookie: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [ALL, TRASHED, PURGE_PENDING], default: ALL }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+ *       - in: query
+ *         name: cursor
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Paginated trash items
+ *
+ * /api/files/{id}/restore:
+ *   post:
+ *     summary: Restore a trashed file before purge starts
+ *     tags: [Files]
+ *     security:
+ *       - sessionCookie: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: File restored
+ *       409:
+ *         description: Purge has already started
+ *
+ * /api/files/{id}/permanent:
+ *   delete:
+ *     summary: Request permanent deletion of a trashed file
+ *     tags: [Files]
+ *     security:
+ *       - sessionCookie: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       202:
+ *         description: Purge request accepted for asynchronous processing
  * 
  * /api/files/{id}/move:
  *   put:

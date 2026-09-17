@@ -38,7 +38,8 @@ const createQuotaService = ({ sequelizeInstance = sequelize, UserModel = User, F
       session.status = 'EXPIRED';
       await session.save({ transaction });
     }
-    user.reserved_bytes = asDecimal(asBigInt(user.reserved_bytes) > released ? asBigInt(user.reserved_bytes) - released : 0n);
+    if (asBigInt(user.reserved_bytes) < released) throw new Error('Quota invariant violated');
+    user.reserved_bytes = asDecimal(asBigInt(user.reserved_bytes) - released);
     await user.save({ transaction });
   };
 
@@ -95,7 +96,8 @@ const createQuotaService = ({ sequelizeInstance = sequelize, UserModel = User, F
     if (!session) throw notFound('Upload session not found or access denied');
     if (!ACTIVE_STATUSES.includes(session.status)) return session;
     const requested = asBigInt(session.requested_size);
-    user.reserved_bytes = asDecimal(asBigInt(user.reserved_bytes) > requested ? asBigInt(user.reserved_bytes) - requested : 0n);
+    if (asBigInt(user.reserved_bytes) < requested) throw new Error('Quota invariant violated');
+    user.reserved_bytes = asDecimal(asBigInt(user.reserved_bytes) - requested);
     session.status = status;
     await Promise.all([user.save({ transaction }), session.save({ transaction })]);
     return session;
@@ -111,7 +113,8 @@ const createQuotaService = ({ sequelizeInstance = sequelize, UserModel = User, F
     if (session.status === 'COMPLETED') return session;
     if (!COMMITTABLE_STATUSES.includes(session.status)) throw conflict('Upload session is no longer active', 'UPLOAD_SESSION_NOT_ACTIVE');
     const requested = asBigInt(session.requested_size);
-    user.reserved_bytes = asDecimal(asBigInt(user.reserved_bytes) > requested ? asBigInt(user.reserved_bytes) - requested : 0n);
+    if (asBigInt(user.reserved_bytes) < requested) throw new Error('Quota invariant violated');
+    user.reserved_bytes = asDecimal(asBigInt(user.reserved_bytes) - requested);
     user.used_bytes = asDecimal(asBigInt(user.used_bytes) + requested);
     session.status = 'COMPLETED';
     session.completed_at = currentTime;

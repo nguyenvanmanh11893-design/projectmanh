@@ -1,6 +1,14 @@
-import { CopyObjectCommand, DeleteObjectCommand, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { CopyObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, GetObjectCommand, HeadObjectCommand, ListObjectVersionsCommand } from '@aws-sdk/client-s3';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
 import { s3Client, S3_BUCKET_NAME } from '../config/aws.js';
+
+export class PartialDeleteError extends Error {
+  constructor(failures) {
+    super('S3 did not confirm deletion of every requested object version');
+    this.name = 'PartialDeleteError';
+    this.failures = failures;
+  }
+}
 
 // The adapter is intentionally small: application code depends on this
 // contract, while unit tests can provide an in-memory implementation.
@@ -60,7 +68,63 @@ const createS3StorageAdapter = ({ client = s3Client, bucket = S3_BUCKET_NAME, pr
     await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key, VersionId: versionId }));
   };
 
-  return { createDirectUploadPost, headObject, getObjectText, copyObjectVersion, deleteObjectVersion };
+  const listObjectVersionsPage = async ({ prefix, keyMarker, versionIdMarker, maxKeys = 1000 }) => {
+    if (!bucket) throw new Error('AWS_S3_BUCKET is not configured');
+    const result = await client.send(new ListObjectVersionsCommand({
+      Bucket: bucket, Prefix: prefix, KeyMarker: keyMarker, VersionIdMarker: versionIdMarker, MaxKeys: maxKeys
+    }));
+    const map = (entry, isDeleteMarker) => ({ key: entry.Key, versionId: entry.VersionId, isDeleteMarker, lastModified: entry.LastModified || null });
+    return {
+      items: [
+        ...(result.Versions || []).map((entry) => map(entry, false)),
+        ...(result.DeleteMarkers || []).map((entry) => map(entry, true))
+      ],
+      isTruncated: Boolean(result.IsTruncated),
+      nextKeyMarker: result.NextKeyMarker || null,
+      nextVersionIdMarker: result.NextVersionIdMarker || null
+    };
+  };
+
+  const listExactObjectVersions = async ({ key }) => {
+    const items = [];
+    let keyMarker; let versionIdMarker;
+    do {
+      const page = await listObjectVersionsPage({ prefix: key, keyMarker, versionIdMarker });
+      // A versioned bucket can still contain a literal "null" version from
+      // before versioning was enabled. It is deletable only when explicitly
+      // included as VersionId="null", so do not silently filter it out.
+      items.push(...page.items.filter((item) => item.key === key && typeof item.versionId === 'string' && item.versionId.length > 0));
+      keyMarker = page.nextKeyMarker || undefined;
+      versionIdMarker = page.nextVersionIdMarker || undefined;
+      if (!page.isTruncated) break;
+      if (!keyMarker) throw new Error('S3 version listing was truncated without a continuation marker');
+      // ListObjectVersions is key-ordered. Once the continuation key has
+      // advanced beyond the exact key, only prefix collisions can remain.
+      if (keyMarker !== key) break;
+    } while (true);
+    return items;
+  };
+
+  const deleteObjectVersions = async ({ objects }) => {
+    if (!bucket) throw new Error('AWS_S3_BUCKET is not configured');
+    const failures = [];
+    for (let offset = 0; offset < objects.length; offset += 1000) {
+      const batch = objects.slice(offset, offset + 1000);
+      const result = await client.send(new DeleteObjectsCommand({
+        Bucket: bucket,
+        Delete: { Quiet: false, Objects: batch.map(({ key, versionId }) => ({ Key: key, VersionId: versionId })) }
+      }));
+      const acknowledged = new Set((result.Deleted || []).map((item) => `${item.Key}\0${item.VersionId}`));
+      const errors = new Map((result.Errors || []).map((item) => [`${item.Key}\0${item.VersionId}`, item.Code || 'DELETE_FAILED']));
+      for (const item of batch) {
+        const identity = `${item.key}\0${item.versionId}`;
+        if (!acknowledged.has(identity)) failures.push({ key: item.key, versionId: item.versionId, code: errors.get(identity) || 'UNCONFIRMED_DELETE' });
+      }
+    }
+    if (failures.length) throw new PartialDeleteError(failures);
+  };
+
+  return { createDirectUploadPost, headObject, getObjectText, copyObjectVersion, deleteObjectVersion, listObjectVersionsPage, listExactObjectVersions, deleteObjectVersions };
 };
 
 export { createS3StorageAdapter };

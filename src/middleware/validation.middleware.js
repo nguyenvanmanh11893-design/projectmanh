@@ -43,6 +43,24 @@ const validateFileList = (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+const validateTrashList = (req, res, next) => {
+  try {
+    assertOptionalUuid(req.query.folder_id, 'folder_id');
+    if (req.query.limit !== undefined && (typeof req.query.limit !== 'string' || !/^\d+$/.test(req.query.limit) || Number(req.query.limit) < 1 || Number(req.query.limit) > 100)) throw badRequest('limit must be a positive integer no greater than 100');
+    if (req.query.search !== undefined && (typeof req.query.search !== 'string' || req.query.search.trim().length > 100)) throw badRequest('search must be a string no more than 100 characters');
+    if (req.query.status !== undefined && !['ALL', 'TRASHED', 'PURGE_PENDING'].includes(req.query.status.toUpperCase())) throw badRequest('status must be ALL, TRASHED, or PURGE_PENDING');
+    if (req.query.sort !== undefined && !['trashed_at', 'file_name', 'file_size'].includes(req.query.sort)) throw badRequest('sort is not allowed');
+    if (req.query.direction !== undefined && !['ASC', 'DESC'].includes(req.query.direction.toUpperCase())) throw badRequest('direction must be ASC or DESC');
+    if (req.query.cursor !== undefined && (typeof req.query.cursor !== 'string' || req.query.cursor.length > 500)) throw badRequest('cursor is invalid');
+    req.query.limit = Number(req.query.limit || 25);
+    req.query.status = (req.query.status || 'ALL').toUpperCase();
+    req.query.sort = req.query.sort || 'trashed_at';
+    req.query.direction = (req.query.direction || 'DESC').toUpperCase();
+    if (typeof req.query.search === 'string') req.query.search = req.query.search.trim() || undefined;
+    next();
+  } catch (error) { next(error); }
+};
+
 const validateIdParam = (req, res, next) => {
   if (!isUuid(req.params.id)) return next(badRequest('id must be a UUID'));
   next();
@@ -91,4 +109,4 @@ const validateUploadCompletePayload = (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-export { isUuid, validateFileList, validateIdParam, validateFolderPayload, validateFileNamePayload, validateMovePayload, validateUploadPayload, validateUploadSessionPayload, validateUploadCompletePayload };
+export { isUuid, validateFileList, validateTrashList, validateIdParam, validateFolderPayload, validateFileNamePayload, validateMovePayload, validateUploadPayload, validateUploadSessionPayload, validateUploadCompletePayload };

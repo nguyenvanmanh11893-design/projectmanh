@@ -7,6 +7,7 @@ import UploadSession from './UploadSession.js';
 import Job from './Job.js';
 import AuditEvent from './AuditEvent.js';
 import Invitation from './Invitation.js';
+import ReconciliationFinding from './ReconciliationFinding.js';
 
 // User 1 : N Folder
 User.hasMany(Folder, { foreignKey: 'user_id', as: 'folders', onDelete: 'CASCADE' });
@@ -44,5 +45,6 @@ export {
   UploadSession,
   Job,
   AuditEvent,
-  Invitation
+  Invitation,
+  ReconciliationFinding
 };

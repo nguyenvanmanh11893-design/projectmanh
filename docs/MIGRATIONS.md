@@ -27,3 +27,9 @@ Do not point these commands at production until a backup and a non-production up
 ## BIGINT contract
 
 All byte fields are MySQL `BIGINT UNSIGNED`. Sequelize model getters serialize them as base-10 strings and setters reject unsafe JavaScript numbers; callers must use decimal strings for values above `Number.MAX_SAFE_INTEGER`. JSON therefore never rounds a quota or file size.
+
+## Phase 7 migration
+
+Migration `006-phase7-lifecycle-reconciliation` is additive and restartable after partial MySQL DDL. It adds `files.purged_at`, trash/reference indexes, and `reconciliation_findings`; then it uses dedupe keys to backfill expiry jobs for active upload sessions, seven-day purge jobs for existing trash, and the singleton periodic reconciliation job.
+
+Stop both API and worker before applying it. Rehearse on a disposable database first, including a rerun after an intentionally interrupted DDL step. The migration does not contact S3, purge a file, adjust quota, or delete an orphan.

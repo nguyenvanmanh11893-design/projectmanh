@@ -2,7 +2,41 @@
 
 ## Current phase
 
-**Phase 6B review: BLOCKED for runtime acceptance; identified implementation bugs corrected and 64 unit tests passed.** Real MySQL migration/locking and process-kill recovery against versioned S3 have not been exercised. No Phase 7 implementation or deployment was performed.
+**Phase 7 source implementation complete; BLOCKED for runtime acceptance.** The full explicit unit/fault-injection suite passes 75/75. Migration 006, real InnoDB lock races, and real versioned-S3 list/delete/partial-failure behavior have not been exercised; no deployment was performed. The earlier Phase 6B runtime acceptance gaps also remain.
+
+## Phase 7 completed
+
+- Added owned file lifecycle APIs: trash, filtered cursor-paginated trash listing, restore before purge begins, and asynchronous permanent-delete request. Trash retains `used_bytes`; only `READY` files can receive download URLs; a permanent request returns HTTP 202 while `PURGE_PENDING`.
+- Trash creates/reuses one durable purge job due after seven days. Restore and purge lock the durable job before the file so one transition wins; once `PURGE_PENDING`, restore is rejected. Re-trash reschedules the same deduplicated job.
+- Added exact-key versioned S3 purge. It paginates versions and delete markers (including literal `null` versions), deletes explicit `(Key, VersionId)` batches, treats S3 `Errors` and unconfirmed identifiers as partial failure, inventories the key again, and only then atomically reduces quota once and marks the retained tombstone `PURGED`.
+- Expanded the worker to claim `FINALIZE_UPLOAD`, `PURGE_FILE`, `EXPIRE_UPLOAD_SESSION`, and `RECONCILE` with existing lease fencing/reclaim. Upload expiry releases a reservation once and races safely with finalization.
+- Added bounded periodic reconciliation: schedules missing expiry jobs, reports stalled `UPLOADED` sessions and restores missing finalize work by dedupe key, corrects quota counters from file/session source rows, and scans `objects/` only from the worker.
+- Added persistent reconciliation findings. Orphans require a later observation after a minimum 24-hour grace period and an authoritative metadata recheck. `ORPHAN_CLEANUP_MODE=report-only` is the default; automatic exact-version deletion requires explicit `delete` mode.
+- Added [lifecycle and reconciliation operations](FILE_LIFECYCLE.md), `.env.example` knobs, OpenAPI endpoint documentation, and fail-closed quota underflow checks.
+
+## Phase 7 files changed
+
+- `database/migrations/006-phase7-lifecycle-reconciliation.js`, `src/models/{File,ReconciliationFinding,index}.js` - purge tombstone timestamp, findings table, lifecycle/reconciliation indexes, backfilled expiry/purge jobs, and the periodic reconciliation seed.
+- `src/services/{file,purge-file,expire-upload,reconciliation,job,quota,s3-storage.adapter}.js` - lifecycle transitions, exact-version purge, expiry, quota/orphan reconciliation, multi-type lease claims, and partial S3 delete handling.
+- `src/controllers/file.controller.js`, `src/routes/file.routes.js`, `src/middleware/validation.middleware.js`, `src/config/swagger-docs.js` - owned trash/list/restore/permanent-delete HTTP contracts and validation.
+- `src/worker.js`, `.env.example`, `docs/FILE_LIFECYCLE.md`, `test/phase7.test.js` - worker dispatch, safe defaults/operations, and Phase 7 fault-injection coverage.
+
+## Phase 7 verification
+
+| Command/check | Result |
+| --- | --- |
+| `node --check src/services/file.service.js src/services/s3-storage.adapter.js src/services/purge-file.service.js src/services/expire-upload.service.js src/services/reconciliation.service.js src/services/job.service.js src/worker.js database/migrations/006-phase7-lifecycle-reconciliation.js` | Passed. |
+| `node --test test/phase1.test.js test/phase2.test.js test/phase3.test.js test/phase4.test.js test/phase5a.test.js test/phase5b.test.js test/phase6a.test.js test/phase6b.test.js test/phase7.test.js` | Passed: 75/75 outside the sandbox after the sandbox returned `spawn EPERM`. Expected Phase 1 injected S3-error logs and the AWS SDK Node 20 support warning appeared. No `.env`, MySQL, or AWS target was used. |
+| `git diff --check` | Passed (Git only reported existing LF-to-CRLF conversion warnings on Windows). |
+| Migration 006 and real MySQL/AWS acceptance | Not run: no explicit disposable MySQL database or private versioned S3 bucket was established. Unit fixtures do not prove InnoDB scheduling, IAM, S3 pagination/consistency, or actual partial batch responses. |
+
+## Limits and conditions to start Phase 8
+
+- Stop API/worker, rehearse migration 006 on a disposable copy of Phase 6B data, rerun it after injected partial DDL, and verify backfilled jobs/findings indexes without modifying production data.
+- Run two workers against MySQL for restore-versus-purge and expiry-versus-finalize races, including lease death and reclaim; verify counters from independent SQL queries.
+- Against a private versioned S3 test bucket, create multiple versions plus delete markers for one exact key, inject partial `DeleteObjects` failure, and verify no quota release until the follow-up inventory is empty.
+- Run at least two orphan scans separated by the configured grace period in `report-only`, review findings, and enable `delete` only in a separately approved test environment. Phase 8 may consume these APIs after these gates; do not describe the system as production-ready before them.
+- `LEGACY_UNVERIFIED` rows remain outside the version-bound lifecycle because they have no trustworthy S3 version; handle them only through a separately reviewed legacy inventory/migration, not the Phase 7 API.
 
 ## Phase 6B completed
 

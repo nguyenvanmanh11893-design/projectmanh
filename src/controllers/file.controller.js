@@ -29,6 +29,12 @@ const list = async (req, res, next) => {
   }
 };
 
+const listTrash = async (req, res, next) => {
+  try {
+    return successResponse(res, 'Trash retrieved successfully', await fileService.listTrash(req.user.id, req.query), 200);
+  } catch (error) { next(error); }
+};
+
 // Download
 const download = async (req, res, next) => {
   try {
@@ -62,19 +68,36 @@ const move = async (req, res, next) => {
 
 const remove = async (req, res, next) => {
   try {
-    await fileService.deleteFile(req.user.id, req.params.id, { requestId: req.requestId });
-    return successResponse(res, 'File deleted successfully', null, 200);
+    const file = await fileService.trashFile(req.user.id, req.params.id, { requestId: req.requestId });
+    return successResponse(res, 'File moved to trash successfully', { file_id: file.id, status: file.status, trashed_at: file.trashed_at }, 200);
   } catch (error) {
     next(error);
   }
+};
+
+const restore = async (req, res, next) => {
+  try {
+    const file = await fileService.restoreFile(req.user.id, req.params.id, { requestId: req.requestId });
+    return successResponse(res, 'File restored successfully', { file_id: file.id, status: file.status }, 200);
+  } catch (error) { next(error); }
+};
+
+const permanentDelete = async (req, res, next) => {
+  try {
+    const result = await fileService.requestPermanentDelete(req.user.id, req.params.id, { requestId: req.requestId });
+    return successResponse(res, result.accepted ? 'Permanent deletion accepted' : 'File was already purged', { file_id: result.file.id, status: result.file.status }, result.accepted ? 202 : 200);
+  } catch (error) { next(error); }
 };
 
 export {
   legacyUploadRemoved,
   upload,
   list,
+  listTrash,
   download,
   rename,
   move,
-  remove
+  remove,
+  restore,
+  permanentDelete
 };
