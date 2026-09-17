@@ -5,7 +5,7 @@ import { successResponse } from '../utils/response.js';
 const create = async (req, res, next) => {
   try {
     const { name, parent_id } = req.body;
-    const folder = await folderService.createFolder(req.user.id, { name, parent_id });
+    const folder = await folderService.createFolder(req.user.id, { name, parent_id }, { requestId: req.requestId });
     return successResponse(res, 'Folder created successfully', folder, 201);
   } catch (error) {
     next(error);
@@ -36,7 +36,7 @@ const getById = async (req, res, next) => {
 const rename = async (req, res, next) => {
   try {
     const { name } = req.body;
-    const updatedFolder = await folderService.renameFolder(req.user.id, req.params.id, { name });
+    const updatedFolder = await folderService.renameFolder(req.user.id, req.params.id, { name }, { requestId: req.requestId });
     return successResponse(res, 'Folder renamed successfully', updatedFolder, 200);
   } catch (error) {
     next(error);
@@ -46,7 +46,7 @@ const rename = async (req, res, next) => {
 // Delete folder
 const remove = async (req, res, next) => {
   try {
-    await folderService.deleteFolder(req.user.id, req.params.id);
+    await folderService.deleteFolder(req.user.id, req.params.id, { requestId: req.requestId });
     return successResponse(res, 'Folder deleted successfully', null, 200);
   } catch (error) {
     next(error);

@@ -15,6 +15,7 @@ import authRoutes from './routes/auth.routes.js';
 import userRoutes from './routes/user.routes.js';
 import folderRoutes from './routes/folder.routes.js';
 import fileRoutes from './routes/file.routes.js';
+import activityRoutes from './routes/activity.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -52,6 +53,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/folders', folderRoutes);
 app.use('/api/files', fileRoutes);
+app.use('/api/activity', activityRoutes);
 
 app.use(notFoundHandler); 
 

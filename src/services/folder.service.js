@@ -1,144 +1,72 @@
-import { Folder, File } from '../models/index.js';
+import { Transaction } from 'sequelize';
+import { sequelize, Folder, File, AuditEvent } from '../models/index.js';
+import { AppError, badRequest } from '../utils/app-error.js';
+import { recordAuditEvent } from './audit.service.js';
 
-/**
- * Create a new folder
- */
-const createFolder = async (userId, { name, parent_id }) => {
-  if (!name || name.trim() === '') {
-    const err = new Error('Folder name is required');
-    err.statusCode = 400;
-    throw err;
-  }
+const notFound = (message) => new AppError(message, { statusCode: 404, code: 'NOT_FOUND' });
+const conflict = (message) => new AppError(message, { statusCode: 409, code: 'FOLDER_NOT_EMPTY' });
 
-  const cleanName = name.trim();
-
-  // If parent_id is provided, check if it exists and belongs to this user
-  if (parent_id) {
-    const parentFolder = await Folder.findOne({
-      where: { id: parent_id, user_id: userId }
-    });
-
-    if (!parentFolder) {
-      const err = new Error('Parent folder not found or access denied');
-      err.statusCode = 404;
-      throw err;
-    }
-  }
-
-  const newFolder = await Folder.create({
-    user_id: userId,
-    parent_id: parent_id || null,
-    name: cleanName
-  });
-
-  return newFolder;
-};
-
-/**
- * Get root folders for the user (parent_id = null)
- */
-const getRootFolders = async (userId) => {
-  const folders = await Folder.findAll({
-    where: {
-      user_id: userId,
-      parent_id: null
-    },
-    order: [['name', 'ASC']]
-  });
-
-  return folders;
-};
-
-/**
- * Get folder details including subfolders and files
- */
-const getFolderById = async (userId, folderId) => {
-  const folder = await Folder.findOne({
-    where: {
-      id: folderId,
-      user_id: userId
-    },
-    include: [
-      {
-        model: Folder,
-        as: 'subfolders',
-        order: [['name', 'ASC']]
-      },
-      {
-        model: File,
-        as: 'files',
-        where: { status: 'LEGACY_UNVERIFIED' },
-        required: false,
-        order: [['file_name', 'ASC']]
+const createFolderService = ({ sequelizeInstance = sequelize, FolderModel = Folder, FileModel = File, AuditEventModel = AuditEvent } = {}) => {
+  const createFolder = async (userId, { name, parent_id }, { requestId } = {}) => sequelizeInstance.transaction(async (transaction) => {
+    const cleanName = name.trim();
+    if (!cleanName) throw badRequest('Folder name is required');
+    if (parent_id) {
+      let parent = await FolderModel.findOne({ where: { id: parent_id, user_id: userId }, transaction, lock: transaction.LOCK.UPDATE });
+      if (!parent) throw notFound('Parent folder not found or access denied');
+      let depth = 1;
+      while (parent.parent_id) {
+        depth += 1;
+        if (depth >= 10) throw new AppError('Folder depth cannot exceed 10 levels', { statusCode: 409, code: 'FOLDER_DEPTH_EXCEEDED' });
+        parent = await FolderModel.findOne({ where: { id: parent.parent_id, user_id: userId }, transaction, lock: transaction.LOCK.UPDATE });
+        if (!parent) throw new AppError('Folder hierarchy is invalid', { statusCode: 409, code: 'FOLDER_HIERARCHY_INVALID' });
       }
-    ]
-  });
-
-  if (!folder) {
-    const err = new Error('Folder not found or access denied');
-    err.statusCode = 404;
-    throw err;
-  }
-
-  return folder;
-};
-
-/**
- * Rename folder
- */
-const renameFolder = async (userId, folderId, { name }) => {
-  if (!name || name.trim() === '') {
-    const err = new Error('New folder name is required');
-    err.statusCode = 400;
-    throw err;
-  }
-
-  const folder = await Folder.findOne({
-    where: {
-      id: folderId,
-      user_id: userId
     }
+    const folder = await FolderModel.create({ user_id: userId, parent_id: parent_id || null, name: cleanName }, { transaction });
+    await recordAuditEvent({ AuditEventModel, userId, action: 'folder.created', resourceType: 'folder', resourceId: folder.id, metadata: { name: folder.name, parent_id: folder.parent_id }, requestId, transaction });
+    return folder;
   });
 
-  if (!folder) {
-    const err = new Error('Folder not found or access denied');
-    err.statusCode = 404;
-    throw err;
-  }
+  const getRootFolders = async (userId) => FolderModel.findAll({ where: { user_id: userId, parent_id: null }, order: [['name', 'ASC'], ['id', 'ASC']] });
 
-  folder.name = name.trim();
-  await folder.save();
+  const getFolderById = async (userId, folderId) => {
+    const folder = await FolderModel.findOne({
+      where: { id: folderId, user_id: userId },
+      include: [
+        { model: FolderModel, as: 'subfolders', required: false },
+        { model: FileModel, as: 'files', where: { status: 'LEGACY_UNVERIFIED' }, required: false }
+      ]
+    });
+    if (!folder) throw notFound('Folder not found or access denied');
+    return folder;
+  };
 
-  return folder;
-};
-
-/**
- * Delete folder safely
- */
-const deleteFolder = async (userId, folderId) => {
-  const folder = await Folder.findOne({
-    where: {
-      id: folderId,
-      user_id: userId
-    }
+  const renameFolder = async (userId, folderId, { name }, { requestId } = {}) => sequelizeInstance.transaction(async (transaction) => {
+    const cleanName = name.trim();
+    if (!cleanName) throw badRequest('New folder name is required');
+    const folder = await FolderModel.findOne({ where: { id: folderId, user_id: userId }, transaction, lock: transaction.LOCK.UPDATE });
+    if (!folder) throw notFound('Folder not found or access denied');
+    folder.name = cleanName;
+    await folder.save({ transaction });
+    await recordAuditEvent({ AuditEventModel, userId, action: 'folder.renamed', resourceType: 'folder', resourceId: folder.id, metadata: { name: folder.name }, requestId, transaction });
+    return folder;
   });
 
-  if (!folder) {
-    const err = new Error('Folder not found or access denied');
-    err.statusCode = 404;
-    throw err;
-  }
-
-  // Phase 2 ownership FKs restrict deletion while files reference this folder.
-  // The explicit empty-folder business rule is implemented in Phase 4.
-  await folder.destroy();
-  return true;
+  const deleteFolder = async (userId, folderId, { requestId } = {}) => sequelizeInstance.transaction({ isolationLevel: Transaction.ISOLATION_LEVELS.READ_COMMITTED }, async (transaction) => {
+    // Creators and file movers lock this same destination row before insert/update.
+    const folder = await FolderModel.findOne({ where: { id: folderId, user_id: userId }, transaction, lock: transaction.LOCK.UPDATE });
+    if (!folder) throw notFound('Folder not found or access denied');
+    const [child, file] = await Promise.all([
+      FolderModel.findOne({ where: { user_id: userId, parent_id: folderId }, transaction, lock: transaction.LOCK.UPDATE }),
+      FileModel.findOne({ where: { user_id: userId, folder_id: folderId }, transaction, lock: transaction.LOCK.UPDATE })
+    ]);
+    // Includes TRASHED files: nothing in the query filters status.
+    if (child || file) throw conflict('Folder is not empty');
+    await folder.destroy({ transaction });
+    await recordAuditEvent({ AuditEventModel, userId, action: 'folder.deleted', resourceType: 'folder', resourceId: folderId, metadata: {}, requestId, transaction });
+    return true;
+  });
+  return { createFolder, getRootFolders, getFolderById, renameFolder, deleteFolder };
 };
 
-export {
-  createFolder,
-  getRootFolders,
-  getFolderById,
-  renameFolder,
-  deleteFolder
-};
+const { createFolder, getRootFolders, getFolderById, renameFolder, deleteFolder } = createFolderService();
+export { createFolder, getRootFolders, getFolderById, renameFolder, deleteFolder, createFolderService };

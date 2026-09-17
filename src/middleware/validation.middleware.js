@@ -28,10 +28,17 @@ const validateFileList = (req, res, next) => {
   try {
     assertOptionalUuid(req.query.folder_id, 'folder_id');
     for (const name of ['page', 'page_size']) {
-      if (req.query[name] !== undefined && (typeof req.query[name] !== 'string' || !/^\d+$/.test(req.query[name]) || Number(req.query[name]) < 1 || Number(req.query[name]) > (name === 'page_size' ? 100 : Number.MAX_SAFE_INTEGER))) {
-        throw badRequest(`${name} must be a positive integer${name === 'page_size' ? ' no greater than 100' : ''}`);
-      }
+      if (req.query[name] !== undefined && (typeof req.query[name] !== 'string' || !/^\d+$/.test(req.query[name]) || Number(req.query[name]) < 1 || Number(req.query[name]) > (name === 'page_size' ? 100 : Number.MAX_SAFE_INTEGER))) throw badRequest(`${name} must be a positive integer${name === 'page_size' ? ' no greater than 100' : ''}`);
     }
+    if (req.query.limit !== undefined && (typeof req.query.limit !== 'string' || !/^\d+$/.test(req.query.limit) || Number(req.query.limit) < 1 || Number(req.query.limit) > 100)) throw badRequest('limit must be a positive integer no greater than 100');
+    if (req.query.search !== undefined && (typeof req.query.search !== 'string' || req.query.search.trim().length > 100)) throw badRequest('search must be a string no more than 100 characters');
+    if (req.query.sort !== undefined && !['created_at', 'updated_at', 'file_name', 'file_size'].includes(req.query.sort)) throw badRequest('sort is not allowed');
+    if (req.query.direction !== undefined && !['ASC', 'DESC'].includes(req.query.direction.toUpperCase())) throw badRequest('direction must be ASC or DESC');
+    if (req.query.cursor !== undefined && (typeof req.query.cursor !== 'string' || req.query.cursor.length > 500)) throw badRequest('cursor is invalid');
+    req.query.limit = Number(req.query.limit || 25);
+    req.query.sort = req.query.sort || 'created_at';
+    req.query.direction = (req.query.direction || 'DESC').toUpperCase();
+    if (typeof req.query.search === 'string') req.query.search = req.query.search.trim() || undefined;
     next();
   } catch (error) { next(error); }
 };

@@ -2,7 +2,31 @@
 
 ## Current phase
 
-**Phase 3 - Server-side session authentication: implemented (unit/static-test scope).** No MySQL instance, browser E2E environment, or AWS environment was accessed in this phase.
+**Phase 4 - File/folder business APIs: implemented (unit/static-test scope).** No MySQL instance, browser E2E environment, or AWS environment was accessed in this phase.
+
+## Phase 4 completed
+
+- Folder create, root list, detail, rename, and empty-only delete are ownership-scoped. Creation rejects level 11; duplicate names remain valid. A folder with child folders or any file, including `TRASHED`, returns `409 FOLDER_NOT_EMPTY`.
+- File list supports bound substring search (maximum 100 characters), an allowlisted sort (`created_at`, `updated_at`, `file_name`, `file_size`), ASC/DESC ordering, and opaque cursor pagination (default 25, maximum 100). `id` is always the final ordering tie-breaker.
+- File rename and move update database metadata only; neither updates `s3_key`. Destination-folder ownership is checked server-side. Folder creation, upload metadata insertion, and file moves lock the destination folder; folder deletion locks/checks the folder and its children/files in the same transaction.
+- Added transactional audit records for Phase 4 mutations and `GET /api/activity`, which filters by the calling user's `subject_user_id` and returns only safe event fields. Audit metadata is explicitly selected and excludes requests, headers, tokens, credentials, and S3 keys.
+- Added migration `003-phase4-listing-indexes` for default stable file cursor ordering and updated OpenAPI documentation for search/sort/cursor and activity.
+
+## Phase 4 files changed
+
+- `src/services/folder.service.js`, `src/services/file.service.js`, `src/services/audit.service.js` - ownership queries, depth/empty constraints, transaction locks, file cursor search/sort/listing, and safe audit writes.
+- `src/controllers/{folder,file,activity}.controller.js`, `src/routes/activity.routes.js`, `src/app.js`, `src/middleware/validation.middleware.js` - request IDs in audits, activity endpoint, and query validation.
+- `database/migrations/003-phase4-listing-indexes.js`, `src/config/swagger-docs.js` - listing index and API contract.
+- `test/phase4.test.js` - cross-user move denial, depth limit, trashed-file delete conflict, no-repeat cursor tie-breaker, duplicate names, and audit-secret coverage.
+
+## Phase 4 verification
+
+| Command/check | Result |
+| --- | --- |
+| `node --check src/services/folder.service.js src/services/file.service.js src/controllers/activity.controller.js src/config/swagger-docs.js` | Passed. |
+| `npm test` | Passed: 18/18. The initial sandbox run was blocked by `spawn EPERM`; rerunning outside the sandbox passed. Expected Phase 1 S3 failure-injection logs appeared. |
+| `git diff --check` | Passed. |
+| MySQL migration/concurrency integration, AWS, browser E2E | Not run: no disposable MySQL/AWS/browser environment is available. In particular, verify row-lock behavior with concurrent create/move/delete transactions on MySQL before production. |
 
 ## Phase 3 completed
 
@@ -76,7 +100,7 @@
 - The legacy upload remains server-memory multipart upload. A 50 MiB request still traverses the API process; it has no upload session, quota reservation, direct-to-S3 transfer, content-byte validation, or S3 version binding.
 - If metadata persistence fails after a successful S3 upload, an orphan S3 object can remain; reconciliation is deferred to later phases. Conversely, deleting S3 first preserves metadata on S3 failure, but no retry job exists yet - the client/operator must retry the delete request.
 - Legacy multipart uploads now create `LEGACY_UNVERIFIED` metadata. The route still bypasses the future direct-upload, quota reservation, validation, and version-binding workflow; it must be replaced in the designated later phases.
-- Folder empty-only/depth rules, list pagination implementation, search, quota services, trash APIs, audit APIs, worker/Lambda, and operational deployment remain for later phases.
+- Quota services, trash/restore APIs, worker/Lambda, and operational deployment remain for later phases. The legacy upload lifecycle remains intentionally outside Phase 4.
 
 ## Historical prerequisites for Phase 3
 
@@ -84,8 +108,9 @@
 - Resolve any detected cross-owner legacy folder/file references through a reviewed data migration before applying Phase 2 to production.
 - Confirm the invitation/pre-provisioning workflow before Phase 3 sessions/registration work.
 
-## Conditions to start Phase 4
+## Conditions to start Phase 5
 
 - Rehearse Phase 2/3 migrations and concurrent invitation consumption on a disposable MySQL database, then review the result before applying to production.
 - Configure a production HTTPS origin (`APP_ORIGIN`) and validate cookie, CSRF, logout, password-revocation, and inactive-account browser flows through the deployed proxy.
-- Preserve the session ownership checks while implementing only the Phase 4 folder/listing requirements.
+- Apply and rehearse migration `003-phase4-listing-indexes` on a disposable MySQL database; concurrently exercise create/move/delete on the same folder to confirm InnoDB locking under the deployment's isolation settings.
+- Preserve Phase 4 ownership, cursor, and audit rules while implementing only the next approved phase.

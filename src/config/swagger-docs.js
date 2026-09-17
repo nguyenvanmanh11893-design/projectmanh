@@ -221,6 +221,22 @@
  *         name: folder_id
  *         schema: { type: string }
  *         description: Optional folder ID filter
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: Case/collation-dependent substring search of file names
+ *       - in: query
+ *         name: sort
+ *         schema: { type: string, enum: [created_at, updated_at, file_name, file_size], default: created_at }
+ *       - in: query
+ *         name: direction
+ *         schema: { type: string, enum: [ASC, DESC], default: DESC }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+ *       - in: query
+ *         name: cursor
+ *         schema: { type: string }
  *     responses:
  *       200:
  *         description: List of files
@@ -303,4 +319,22 @@
  *     responses:
  *       200:
  *         description: File moved
+ *
+ * /api/activity:
+ *   get:
+ *     summary: List the calling user's audit activity
+ *     tags:
+ *       - Activity
+ *     security:
+ *       - sessionCookie: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+ *       - in: query
+ *         name: cursor
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: The caller's safe audit events only
  */
