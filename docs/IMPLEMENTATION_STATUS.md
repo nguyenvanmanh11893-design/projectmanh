@@ -2,7 +2,35 @@
 
 ## Current phase
 
-**Phase 5B - Direct S3 upload: implemented (unit-test scope).** The Phase 5A MySQL reservation test ran against the configured disposable test database; no Phase 5B migration, AWS S3, or browser E2E environment was run.
+**Phase 6A - S3 file-validator Lambda: implemented (unit-test scope; not deployed).** The Lambda is independent of Express and RDS. AWS S3 event/IAM configuration and a real Lambda invocation have not been run.
+
+## Phase 6A completed
+
+- Added the standalone `lambdas/s3-file-validator` entry point. It processes every S3 event record independently, decodes form-style S3 keys (`+` to space before URL decoding), requires `versionId`, and pins that version in `GetObject`.
+- It applies the 50 MiB limit and basic byte-content validation for PDF, JPEG, PNG, and UTF-8 text; it does not trust MIME metadata or a filename. TXT permits an optional UTF-8 BOM but rejects malformed UTF-8, NUL bytes, and binary-like C0 controls (other than tab/LF/CR). No content is executed, decompressed, or rendered, and this is explicitly not antivirus scanning.
+- Added versioned report contract `validator-report/v1` in `contracts/validator-report-v1.schema.json`. Reports have a deterministic SHA-256 ID from bucket, decoded incoming key, version ID, and validator version; contain only source metadata/verdict (not contents or secrets); and are written to `processing-results/{report_id}.json`.
+- Duplicate events therefore target the same report key, while a distinct object version gets a different report. The handler skips non-`incoming/` records, so result writes cannot form an event loop when the S3 notification is prefix-filtered to `incoming/`.
+- S3 read, stream, and report-write errors are deliberately rethrown for Lambda retry; only completed inspection emits `REJECTED`.
+
+## Phase 6A files changed
+
+- `lambdas/s3-file-validator/{index,validator}.js` - Lambda handler, exact-version S3 adapter, deterministic reports, and safe content checks.
+- `lambdas/s3-file-validator/README.md`, `contracts/validator-report-v1.schema.json` - operational constraints and versioned worker-facing report schema.
+- `test/phase6a.test.js` - byte-content, fake MIME, size, URL key, duplicate/version, multi-record, loop, and S3-failure coverage.
+
+## Phase 6A verification
+
+| Command/check | Result |
+| --- | --- |
+| `node --check lambdas/s3-file-validator/index.js lambdas/s3-file-validator/validator.js test/phase6a.test.js` | Passed. |
+| `npm test` | Passed: 44/44 tests, including 7 Phase 6A tests and the enabled existing disposable-MySQL quota test. Expected Phase 1 S3 fault-injection logs and AWS SDK Node-version warnings appeared. |
+| `git diff --check` | Passed. |
+| AWS S3/Lambda event, IAM and retry behavior | Not run: this phase explicitly does not deploy AWS. |
+
+## Conditions to start Phase 6B
+
+- Deploy a private versioned bucket notification filtered strictly to `incoming/`, grant the Lambda least-privilege exact-version `GetObject` and `PutObject` only under `processing-results/`, and verify retry behavior with AWS fault injection.
+- Confirm Phase 6B reads and validates `validator-report/v1`, `validator_version`, source bucket/key/version ID, and deterministic report ID before it changes any RDS state or quota.
 
 ## Phase 5B completed
 

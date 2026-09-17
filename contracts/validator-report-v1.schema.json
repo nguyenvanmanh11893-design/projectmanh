@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cloud-file-manager/validator-report-v1",
+  "title": "S3 file validator report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "validator_version", "report_id", "status", "reason_code", "source"],
+  "properties": {
+    "schema_version": { "const": "validator-report/v1" },
+    "validator_version": { "type": "string", "minLength": 1 },
+    "report_id": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "status": { "enum": ["PASSED", "REJECTED"] },
+    "reason_code": {
+      "enum": ["VALID", "FILE_TOO_LARGE", "UNSUPPORTED_CONTENT", "INVALID_PDF", "INVALID_JPEG", "INVALID_PNG", "INVALID_TEXT_ENCODING", "BINARY_TEXT"]
+    },
+    "detected_mime_type": { "type": ["string", "null"] },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bucket", "key", "version_id"],
+      "properties": {
+        "bucket": { "type": "string", "minLength": 1 },
+        "key": { "type": "string", "pattern": "^incoming/" },
+        "version_id": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}
