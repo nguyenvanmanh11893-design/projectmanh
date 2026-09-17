@@ -11,9 +11,10 @@ const userId = '25f00dbf-4788-4b4b-8edc-e79877090f23';
 const otherUserId = '3d7549e0-41a4-4d31-94c6-2d30b6e430ea';
 const initialNow = new Date('2026-09-17T12:00:00.000Z');
 
-const fixture = ({ now = () => initialNow, storage } = {}) => {
+const fixture = ({ now = () => initialNow, storage, enqueueFails = false } = {}) => {
   const users = new Map([[userId, { id: userId, quota_bytes: '1000', used_bytes: '0', reserved_bytes: '0' }], [otherUserId, { id: otherUserId, quota_bytes: '1000', used_bytes: '0', reserved_bytes: '0' }]]);
   const sessions = [];
+  const jobs = [];
   const attach = (row) => Object.assign(row, { save: async () => row });
   let queue = Promise.resolve();
   const sequelizeInstance = { transaction: async (callback) => {
@@ -21,7 +22,15 @@ const fixture = ({ now = () => initialNow, storage } = {}) => {
     let finish;
     queue = new Promise((resolve) => { finish = resolve; });
     await previous;
-    try { return await callback({ LOCK: { UPDATE: 'UPDATE' } }); } finally { finish(); }
+    const oldSessions = sessions.map((row) => ({ ...row }));
+    const oldUsers = [...users].map(([id, row]) => [id, { ...row }]);
+    const oldJobs = jobs.length;
+    try { return await callback({ LOCK: { UPDATE: 'UPDATE' } }); }
+    catch (error) {
+      sessions.splice(0, sessions.length, ...oldSessions); jobs.length = oldJobs;
+      users.clear(); for (const [id, row] of oldUsers) users.set(id, row);
+      throw error;
+    } finally { finish(); }
   } };
   const UploadSessionModel = {
     findAll: async ({ where }) => {
@@ -34,9 +43,10 @@ const fixture = ({ now = () => initialNow, storage } = {}) => {
     create: async (row) => { const item = attach({ ...row }); sessions.push(item); return item; }
   };
   const UserModel = { findByPk: async (id) => { const user = users.get(id); return user ? attach(user) : null; } };
-  const quota = createQuotaService({ sequelizeInstance, UserModel, FolderModel: { findOne: async () => null }, UploadSessionModel, now });
+  const JobModel = { create: async (row) => { if (enqueueFails) throw new Error('enqueue failed'); const item = attach({ id: `job-${jobs.length + 1}`, ...row }); jobs.push(item); return item; } };
+  const quota = createQuotaService({ sequelizeInstance, UserModel, FolderModel: { findOne: async () => null }, UploadSessionModel, JobModel, now });
   const direct = createDirectUploadService({ quota, storage, now });
-  return { quota, direct, sessions };
+  return { quota, direct, sessions, jobs };
 };
 
 const reserve = async (quota, key = 'upload-key') => quota.reserveQuota(userId, { requested_size: 10, declared_mime_type: 'application/pdf', folder_id: null }, key);
@@ -104,12 +114,13 @@ test('complete is ownership-scoped before it calls storage HEAD', async () => {
 test('same-version repeated and concurrent complete calls bind exactly once', async () => {
   let heads = 0;
   const storage = { createDirectUploadPost: async () => ({}), headObject: async () => { heads += 1; return { contentLength: 10, contentType: 'application/pdf' }; } };
-  const { quota, direct, sessions } = fixture({ storage });
+  const { quota, direct, sessions, jobs } = fixture({ storage });
   const session = await reserve(quota);
   const results = await Promise.all([direct.completeDirectUpload(userId, session.id, 'v1'), direct.completeDirectUpload(userId, session.id, 'v1')]);
   assert.equal(results[0].source_version_id, 'v1');
   assert.equal(results[1].source_version_id, 'v1');
   assert.equal(sessions[0].status, 'UPLOADED');
+  assert.equal(jobs.length, 1);
   assert.ok(heads >= 1);
   await assert.rejects(() => direct.completeDirectUpload(userId, session.id, 'v2'), { code: 'UPLOAD_VERSION_CONFLICT', statusCode: 409 });
 });
@@ -160,6 +171,29 @@ test('an UPLOADED session cannot use the pre-validation commitQuota helper', asy
 test('PENDING files are not downloadable before validation', async () => {
   const service = createFileService({ FileModel: { findOne: async ({ where }) => { assert.equal(where.status, 'READY'); return null; } } });
   await assert.rejects(() => service.getDownloadUrl(userId, 'file'), { code: 'NOT_FOUND' });
+});
+
+test('complete retry stays idempotent after worker completion/rejection and still checks ownership', async () => {
+  for (const status of ['COMPLETED', 'REJECTED']) {
+    const storage = { headObject: async () => ({ contentLength: 10, contentType: 'application/pdf' }) };
+    const { quota, direct, jobs } = fixture({ storage });
+    const session = await reserve(quota);
+    await direct.completeDirectUpload(userId, session.id, 'v1');
+    session.status = status;
+    assert.equal((await direct.completeDirectUpload(userId, session.id, 'v1')).status, status);
+    await assert.rejects(() => direct.completeDirectUpload(userId, session.id, 'v2'), { code: 'UPLOAD_VERSION_CONFLICT' });
+    await assert.rejects(() => direct.completeDirectUpload(otherUserId, session.id, 'v1'), { code: 'NOT_FOUND' });
+    assert.equal(jobs.length, 1);
+  }
+});
+
+test('enqueue failure rolls source binding back so complete can be retried', async () => {
+  const { quota, direct, sessions, jobs } = fixture({ enqueueFails: true, storage: { headObject: async () => ({ contentLength: 10, contentType: 'application/pdf' }) } });
+  const session = await reserve(quota);
+  await assert.rejects(() => direct.completeDirectUpload(userId, session.id, 'v1'), /enqueue failed/);
+  assert.equal(sessions[0].status, 'RESERVED'); assert.equal(sessions[0].source_version_id, undefined);
+  assert.equal(jobs.length, 0);
+  assert.equal((await quota.getUsage(userId)).reserved_bytes, '10');
 });
 
 test('legacy multipart endpoint is explicitly disabled instead of bypassing direct-upload controls', async () => {

@@ -22,7 +22,7 @@ test('S3 upload failure does not create completed metadata', async () => {
 test('S3 delete failure retains metadata for retry', async () => {
   let destroyed = false;
   const service = createFileService({
-    FileModel: { findOne: async () => ({ s3_key: 'users/x/file.pdf', destroy: async () => { destroyed = true; } }) },
+    FileModel: { findOne: async () => ({ status: 'LEGACY_UNVERIFIED', s3_key: 'users/x/file.pdf', destroy: async () => { destroyed = true; } }) },
     storage: { deleteFromS3: async () => { throw new Error('S3 timeout'); } }
   });
 
@@ -32,7 +32,7 @@ test('S3 delete failure retains metadata for retry', async () => {
 
 test('presign failure does not return a public URL', async () => {
   const service = createFileService({
-    FileModel: { findOne: async () => ({ id: fileId, file_name: 'report.pdf', original_name: 'report.pdf', s3_key: 'private/key' }) },
+    FileModel: { findOne: async () => ({ id: fileId, file_name: 'report.pdf', original_name: 'report.pdf', s3_key: 'private/key', s3_version_id: 'v1' }) },
     storage: { generatePresignedDownloadUrl: async () => { throw new Error('credential error'); } }
   });
 

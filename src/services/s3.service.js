@@ -20,10 +20,12 @@ const uploadToS3 = async ({ buffer, key, mimeType }) => {
 /**
  * Generate S3 Presigned URL for downloading file directly from S3
  */
-const generatePresignedDownloadUrl = async ({ key, originalName, expiresInSeconds = 3600 }) => {
+const generatePresignedDownloadUrl = async ({ key, versionId, originalName, expiresInSeconds = 300 }) => {
+  if (!versionId || versionId === 'null') throw new Error('An immutable version is required');
   const command = new GetObjectCommand({
     Bucket: S3_BUCKET_NAME,
     Key: key,
+    VersionId: versionId,
     ResponseContentDisposition: `attachment; filename="${encodeURIComponent(originalName)}"`
   });
 

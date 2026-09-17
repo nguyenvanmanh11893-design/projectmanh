@@ -2,7 +2,37 @@
 
 ## Current phase
 
-**Phase 6A - S3 file-validator Lambda: implemented (unit-test scope; not deployed).** The Lambda is independent of Express and RDS. AWS S3 event/IAM configuration and a real Lambda invocation have not been run.
+**Phase 6B review: BLOCKED for runtime acceptance; identified implementation bugs corrected and 64 unit tests passed.** Real MySQL migration/locking and process-kill recovery against versioned S3 have not been exercised. No Phase 7 implementation or deployment was performed.
+
+## Phase 6B completed
+
+- Added migration `005-phase6b-durable-worker`: explicit `next_attempt_at`, job deduplication, lease token/generation, copy receipt, and due-job index. Source-version binding and durable finalization-job creation are now atomic.
+- Added a separate `npm run worker` process with transaction/lease claims, bounded jittered exponential retry, attempt limits, expired-lease recovery, and bounded SIGTERM/SIGINT drain/exit. It uses database fencing rather than API-process memory.
+- Added report validation and finalization: report/source/version/hash/validator-version checks, REJECTED one-time quota release, exact-version S3 copy, destination version persistence, and a fenced post-copy DB transaction for READY/session/quota/audit.
+- Review corrections: strict schema/verdict validation; consistent user/session locking; post-wait lease checks; fail-closed quota underflow; report-independent expiry; terminal complete retries; migration prerequisite/backfill; pinned downloads and READY listing; guard against legacy deletion of versioned files; bounded shutdown and safe error codes. Failed copies retain versions for reference-checked cleanup; no immediate delete after ambiguous COMMIT.
+- Tests now cover transaction rollback and lost COMMIT acknowledgement, two workers racing, expiry/cancellation, enqueue rollback, malformed/missing reports, retry cap/redaction, S3 version encoding, and stuck shutdown. See [review findings and acceptance conditions](PHASE6B_REVIEW.md) and [worker protocol](DURABLE_WORKER.md).
+
+## Phase 6B files changed
+
+- `database/migrations/005-phase6b-durable-worker.js`, `src/models/Job.js`, `src/services/{job,finalize-upload,quota}.service.js` - durable scheduling, fencing, atomic enqueue, and finalization.
+- `src/services/s3-storage.adapter.js`, `src/worker.js`, `package.json`, `.env.example` - version-pinned S3 operations and separate worker runtime/configuration.
+- `test/phase6b.test.js`, `test/phase5b.test.js`, `docs/DURABLE_WORKER.md` - failure injection and operations/recovery documentation.
+- Review also changed `database/migrations/004-phase5b-direct-upload.js`, `src/services/{file,s3}.service.js`, added `src/services/worker-shutdown.js`, and updated `test/phase1.test.js`; no dependency was added.
+
+## Phase 6B verification
+
+| Command/check | Result |
+| --- | --- |
+| `node --test test/phase1.test.js test/phase2.test.js test/phase3.test.js test/phase4.test.js test/phase5a.test.js test/phase5b.test.js test/phase6a.test.js test/phase6b.test.js` | Passed: 64/64, using approved execution outside the sandbox after `spawn EPERM`. No dotenv import, MySQL or AWS access. Expected injected legacy S3 errors and Node 20 SDK warning appeared. |
+| `npm test` | Not rerun during review: explicit unit-file selection avoids the opt-in DB test and loading local .env. The prior sandbox EPERM is not a test failure in application code. |
+| `git diff --check` | Passed. |
+| MySQL migration/lease race and real S3 process kill/restart | Not run: no explicit disposable DB/bucket target was established or used during review. Mock rollback/lease tests are not evidence of InnoDB or real process recovery. |
+
+## Conditions to start Phase 7
+
+- Rehearse migration 005 and competing worker claims against disposable MySQL (including an expired lease and transaction rollback).
+- Run real versioned-bucket report/copy/cancellation crash drills with IAM allowing exact-version get/copy/delete only under the required prefixes.
+- Establish the documented grace-period/recheck reconciliation job before automatically deleting orphan destination versions.
 
 ## Phase 6A completed
 

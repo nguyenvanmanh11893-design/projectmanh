@@ -40,7 +40,7 @@ const createFileService = ({ FileModel = File, FolderModel = Folder, AuditEventM
 
   const listFiles = async (userId, { folder_id = null, search, sort = 'created_at', direction = 'DESC', limit = 25, cursor } = {}) => {
     if (folder_id && !await FolderModel.findOne({ where: { id: folder_id, user_id: userId } })) throw notFound('Folder not found or access denied');
-    const where = { user_id: userId, folder_id: folder_id || null, status: 'LEGACY_UNVERIFIED' };
+    const where = { user_id: userId, folder_id: folder_id || null, status: { [Op.in]: ['LEGACY_UNVERIFIED', 'READY'] } };
     if (search) where.file_name = { [Op.like]: `%${escapeLike(search)}%` };
     const after = decodeCursor(cursor, sort, direction);
     if (after) {
@@ -57,9 +57,10 @@ const createFileService = ({ FileModel = File, FolderModel = Folder, AuditEventM
     const file = await FileModel.findOne({ where: { id: fileId, user_id: userId, status: 'READY' } });
     if (!file) throw notFound('File not found or access denied');
     try {
-      const downloadUrl = await storage.generatePresignedDownloadUrl({ key: file.s3_key, originalName: file.original_name, expiresInSeconds: 3600 });
-      return { file_id: file.id, file_name: file.file_name, download_url: downloadUrl, expires_in: '1 hour' };
-    } catch (error) { console.error('[S3 PRESIGN FAILED]', error); throw new AppError('Download is temporarily unavailable', { statusCode: 502, code: 'STORAGE_PRESIGN_FAILED' }); }
+      if (!file.s3_version_id || file.s3_version_id === 'null') throw new Error('Missing immutable object version');
+      const downloadUrl = await storage.generatePresignedDownloadUrl({ key: file.s3_key, versionId: file.s3_version_id, originalName: file.original_name, expiresInSeconds: 300 });
+      return { file_id: file.id, file_name: file.file_name, download_url: downloadUrl, expires_in: '5 minutes' };
+    } catch { console.error('[S3 PRESIGN FAILED]'); throw new AppError('Download is temporarily unavailable', { statusCode: 502, code: 'STORAGE_PRESIGN_FAILED' }); }
   };
 
   const renameFile = async (userId, fileId, { file_name }, { requestId } = {}) => sequelizeInstance.transaction(async (transaction) => {
@@ -86,6 +87,7 @@ const createFileService = ({ FileModel = File, FolderModel = Folder, AuditEventM
   const deleteFile = async (userId, fileId, { requestId } = {}) => {
     const file = await FileModel.findOne({ where: { id: fileId, user_id: userId } });
     if (!file) throw notFound('File not found or access denied');
+    if (file.status !== 'LEGACY_UNVERIFIED') throw new AppError('Versioned file deletion requires the lifecycle workflow', { statusCode: 409, code: 'FILE_LIFECYCLE_REQUIRED' });
     try { await storage.deleteFromS3({ key: file.s3_key }); }
     catch (error) { console.error('[S3 DELETE FAILED]', error); throw new AppError('File deletion failed; metadata was retained', { statusCode: 502, code: 'STORAGE_DELETE_FAILED' }); }
     await file.destroy();

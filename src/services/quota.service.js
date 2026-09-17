@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Op } from 'sequelize';
-import { sequelize, User, Folder, UploadSession } from '../models/index.js';
+import { sequelize, User, Folder, UploadSession, Job } from '../models/index.js';
 import { AppError, badRequest } from '../utils/app-error.js';
 
 export const DEFAULT_QUOTA_BYTES = 1024n * 1024n * 1024n;
@@ -25,7 +25,7 @@ const payloadHash = ({ requested_size, declared_mime_type, folder_id }) => creat
   .update(JSON.stringify({ requested_size: String(requested_size), declared_mime_type, folder_id: folder_id || null }))
   .digest('hex');
 
-const createQuotaService = ({ sequelizeInstance = sequelize, UserModel = User, FolderModel = Folder, UploadSessionModel = UploadSession, now = () => new Date() } = {}) => {
+const createQuotaService = ({ sequelizeInstance = sequelize, UserModel = User, FolderModel = Folder, UploadSessionModel = UploadSession, JobModel = Job, now = () => new Date() } = {}) => {
   const expireSessions = async (user, transaction, currentTime) => {
     const expired = await UploadSessionModel.findAll({
       where: { user_id: user.id, status: { [Op.in]: ACTIVE_STATUSES }, expires_at: { [Op.lte]: currentTime } },
@@ -141,38 +141,58 @@ const createQuotaService = ({ sequelizeInstance = sequelize, UserModel = User, F
   // These two operations deliberately keep S3 calls outside the DB transaction.
   // `bindSourceVersion` re-locks the row, making concurrent complete requests
   // converge on one exact version.
-  const prepareDirectUpload = async (userId, sessionId) => sequelizeInstance.transaction(async (transaction) => {
+  const prepareDirectUpload = async (userId, sessionId) => {
+    const result = await sequelizeInstance.transaction(async (transaction) => {
     const currentTime = now();
     const user = await UserModel.findByPk(userId, { transaction, lock: transaction.LOCK.UPDATE });
     if (!user) throw notFound('User not found');
     await expireSessions(user, transaction, currentTime);
     const session = await UploadSessionModel.findOne({ where: { id: sessionId, user_id: userId }, transaction, lock: transaction.LOCK.UPDATE });
     if (!session) throw notFound('Upload session not found or access denied');
-    if (session.status === 'EXPIRED') throw conflict('Upload session has expired', 'UPLOAD_SESSION_EXPIRED');
-    if (session.source_version_id && session.status === 'UPLOADED') return session;
+    if (session.status === 'EXPIRED') return session;
+    if (session.source_version_id && ['UPLOADED', 'COMPLETED', 'REJECTED'].includes(session.status)) return session;
     if (ACTIVE_STATUSES.includes(session.status)) return session;
     throw conflict('Upload session is no longer active', 'UPLOAD_SESSION_NOT_ACTIVE');
-  });
+    });
+    if (result.status === 'EXPIRED') throw conflict('Upload session has expired', 'UPLOAD_SESSION_EXPIRED');
+    return result;
+  };
 
-  const bindSourceVersion = async (userId, sessionId, versionId) => sequelizeInstance.transaction(async (transaction) => {
+  const bindSourceVersion = async (userId, sessionId, versionId) => {
+    const result = await sequelizeInstance.transaction(async (transaction) => {
     const currentTime = now();
     const user = await UserModel.findByPk(userId, { transaction, lock: transaction.LOCK.UPDATE });
     if (!user) throw notFound('User not found');
     await expireSessions(user, transaction, currentTime);
     const session = await UploadSessionModel.findOne({ where: { id: sessionId, user_id: userId }, transaction, lock: transaction.LOCK.UPDATE });
     if (!session) throw notFound('Upload session not found or access denied');
-    if (session.source_version_id && session.status === 'UPLOADED') {
+    if (session.source_version_id && ['UPLOADED', 'COMPLETED', 'REJECTED'].includes(session.status)) {
       if (session.source_version_id === versionId) return session;
       throw conflict('A different object version has already been completed for this upload', 'UPLOAD_VERSION_CONFLICT');
     }
-    if (session.status === 'EXPIRED') throw conflict('Upload session has expired', 'UPLOAD_SESSION_EXPIRED');
+    if (session.status === 'EXPIRED') return session;
     if (!ACTIVE_STATUSES.includes(session.status)) throw conflict('Upload session is no longer active', 'UPLOAD_SESSION_NOT_ACTIVE');
     session.source_version_id = versionId;
     session.status = 'UPLOADED';
     session.completed_at = currentTime;
-    await session.save({ transaction });
+    // Binding the source and making its durable work visible are one DB
+    // transaction. A process crash can therefore yield either neither change
+    // or an independently claimable finalization job, never a stranded upload.
+    const fileId = randomUUID();
+    await Promise.all([
+      session.save({ transaction }),
+      JobModel.create({
+        type: 'FINALIZE_UPLOAD', status: 'QUEUED',
+        payload: { upload_session_id: session.id, file_id: fileId },
+        dedupe_key: `finalize:${session.id}`,
+        attempts: 0, max_attempts: 10, run_at: currentTime, next_attempt_at: currentTime
+      }, { transaction })
+    ]);
     return session;
-  });
+    });
+    if (result.status === 'EXPIRED') throw conflict('Upload session has expired', 'UPLOAD_SESSION_EXPIRED');
+    return result;
+  };
 
   return { reserveQuota, releaseQuota, commitQuota, getUploadSession, getUsage, prepareDirectUpload, bindSourceVersion };
 };
