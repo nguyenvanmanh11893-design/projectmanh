@@ -1,4 +1,4 @@
-const swaggerJSDoc = require('swagger-jsdoc');
+import swaggerJSDoc from 'swagger-jsdoc';
 
 const swaggerDefinition = {
   openapi: '3.0.0',
@@ -7,7 +7,7 @@ const swaggerDefinition = {
     version: '1.0.0',
     description: 'Personal Cloud File Management system documentation with Express, MySQL, and AWS S3',
     contact: {
-      name: 'Dao Van Manh',
+      name: 'Nguyen Van Manh',
       email: 'manh@gmail.com'
     }
   },
@@ -41,4 +41,4 @@ const options = {
 
 const swaggerSpec = swaggerJSDoc(options);
 
-module.exports = swaggerSpec;
+export default swaggerSpec;

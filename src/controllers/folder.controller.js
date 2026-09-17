@@ -1,5 +1,5 @@
-const folderService = require('../services/folder.service');
-const { successResponse } = require('../utils/response');
+import * as folderService from '../services/folder.service.js';
+import { successResponse } from '../utils/response.js';
 
 // Create folder
 const create = async (req, res, next) => {
@@ -53,7 +53,7 @@ const remove = async (req, res, next) => {
   }
 };
 
-module.exports = {
+export {
   create,
   getRootList,
   getById,

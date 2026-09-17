@@ -1,6 +1,6 @@
-const userService = require('../services/user.service');
-const authService = require('../services/auth.service');
-const { successResponse } = require('../utils/response');
+import * as userService from '../services/user.service.js';
+import * as authService from '../services/auth.service.js';
+import { successResponse } from '../utils/response.js';
 
 // Get profile
 const getProfile = async (req, res, next) => {
@@ -34,7 +34,7 @@ const changePassword = async (req, res, next) => {
   }
 };
 
-module.exports = {
+export {
   getProfile,
   updateProfile,
   changePassword

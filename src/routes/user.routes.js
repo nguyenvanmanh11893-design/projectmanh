@@ -1,11 +1,11 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const userController = require('../controllers/user.controller');
-const { authenticateToken } = require('../middleware/auth.middleware');
+import * as userController from '../controllers/user.controller.js';
+import { authenticateToken } from '../middleware/auth.middleware.js';
 router.use(authenticateToken);
 
 router.get('/me', userController.getProfile);
 router.put('/me', userController.updateProfile);
 router.put('/me/password', userController.changePassword);
 
-module.exports = router;
+export default router;

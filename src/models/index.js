@@ -1,7 +1,7 @@
-const { sequelize } = require('../config/database');
-const User = require('./User');
-const Folder = require('./Folder');
-const File = require('./File');
+import { sequelize } from '../config/database.js';
+import User from './User.js';
+import Folder from './Folder.js';
+import File from './File.js';
 
 // User 1 : N Folder
 User.hasMany(Folder, { foreignKey: 'user_id', as: 'folders', onDelete: 'CASCADE' });
@@ -19,7 +19,7 @@ Folder.belongsTo(Folder, { foreignKey: 'parent_id', as: 'parentFolder' });
 Folder.hasMany(File, { foreignKey: 'folder_id', as: 'files', onDelete: 'SET NULL' });
 File.belongsTo(Folder, { foreignKey: 'folder_id', as: 'folder' });
 
-module.exports = {
+export {
   sequelize,
   User,
   Folder,

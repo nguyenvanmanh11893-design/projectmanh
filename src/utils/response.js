@@ -26,7 +26,7 @@ const errorResponse = (res, message = 'An error occurred', statusCode = 500, err
   return res.status(statusCode).json(responsePayload);
 };
 
-module.exports = {
+export {
   successResponse,
   errorResponse
 };

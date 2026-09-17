@@ -25,7 +25,7 @@
  *               username: { type: string, example: "manh" }
  *               email: { type: string, example: "manh@gmail.com" }
  *               password: { type: string, example: "12345678" }
- *               full_name: { type: string, example: "Dao Van Manh" }
+ *               full_name: { type: string, example: "Nguyen Van Manh" }
  *     responses:
  *       201:
  *         description: Registration successful
@@ -74,7 +74,7 @@
  *           schema:
  *             type: object
  *             properties:
- *               full_name: { type: string, example: "Dao Van Manh" }
+ *               full_name: { type: string, example: "Nguyen Van Manh" }
  *               avatar_url: { type: string, example: "https://example.com/avatar.jpg" }
  *     responses:
  *       200:

@@ -1,5 +1,5 @@
-const bcrypt = require('bcryptjs');
-const { User } = require('../models');
+import bcrypt from 'bcryptjs';
+import { User } from '../models/index.js';
 
 /**
  * Update Profile (only full_name and avatar_url)
@@ -65,7 +65,7 @@ const changePassword = async (userId, { current_password, new_password }) => {
   return true;
 };
 
-module.exports = {
+export {
   updateProfile,
   changePassword
 };

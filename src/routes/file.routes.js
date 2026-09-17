@@ -1,8 +1,8 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const fileController = require('../controllers/file.controller');
-const { authenticateToken } = require('../middleware/auth.middleware');
-const upload = require('../middleware/upload.middleware');
+import * as fileController from '../controllers/file.controller.js';
+import { authenticateToken } from '../middleware/auth.middleware.js';
+import upload from '../middleware/upload.middleware.js';
 
 router.use(authenticateToken);
 
@@ -14,4 +14,4 @@ router.put('/:id', fileController.rename);
 router.put('/:id/move', fileController.move);
 router.delete('/:id', fileController.remove);
 
-module.exports = router;
+export default router;

@@ -1,7 +1,7 @@
-const bcrypt = require('bcryptjs');
-const { Op } = require('sequelize');
-const { User } = require('../models');
-const { signToken } = require('../utils/jwt');
+import bcrypt from 'bcryptjs';
+import { Op } from 'sequelize';
+import { User } from '../models/index.js';
+import { signToken } from '../utils/jwt.js';
 
 /**
  * Register a new User
@@ -122,7 +122,7 @@ const getProfile = async (userId) => {
   return user;
 };
 
-module.exports = {
+export {
   register,
   login,
   getProfile

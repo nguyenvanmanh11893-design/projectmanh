@@ -1,4 +1,4 @@
-const { Folder, File } = require('../models');
+import { Folder, File } from '../models/index.js';
 
 /**
  * Create a new folder
@@ -135,7 +135,7 @@ const deleteFolder = async (userId, folderId) => {
   return true;
 };
 
-module.exports = {
+export {
   createFolder,
   getRootFolders,
   getFolderById,

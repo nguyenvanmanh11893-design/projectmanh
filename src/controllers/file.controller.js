@@ -1,5 +1,5 @@
-const fileService = require('../services/file.service');
-const { successResponse } = require('../utils/response');
+import * as fileService from '../services/file.service.js';
+import { successResponse } from '../utils/response.js';
 
 // Upload
 const upload = async (req, res, next) => {
@@ -63,7 +63,7 @@ const remove = async (req, res, next) => {
   }
 };
 
-module.exports = {
+export {
   upload,
   list,
   download,

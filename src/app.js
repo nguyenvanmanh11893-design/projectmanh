@@ -1,18 +1,21 @@
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const path = require('path');
-const swaggerUi = require('swagger-ui-express');
-const swaggerSpec = require('./config/swagger');
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './config/swagger.js';
 
-const { successResponse } = require('./utils/response');
-const { notFoundHandler, errorHandler } = require('./middleware/error.middleware');
+import { successResponse } from './utils/response.js';
+import { notFoundHandler, errorHandler } from './middleware/error.middleware.js';
 
 // Import Routes
-const authRoutes = require('./routes/auth.routes');
-const userRoutes = require('./routes/user.routes');
-const folderRoutes = require('./routes/folder.routes');
-const fileRoutes = require('./routes/file.routes');
+import authRoutes from './routes/auth.routes.js';
+import userRoutes from './routes/user.routes.js';
+import folderRoutes from './routes/folder.routes.js';
+import fileRoutes from './routes/file.routes.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 
@@ -51,4 +54,4 @@ app.use(notFoundHandler);
 
 app.use(errorHandler);
 
-module.exports = app;
+export default app;

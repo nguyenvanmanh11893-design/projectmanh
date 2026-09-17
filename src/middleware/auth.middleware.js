@@ -1,6 +1,6 @@
-const { verifyToken } = require('../utils/jwt');
-const { errorResponse } = require('../utils/response');
-const { User } = require('../models');
+import { verifyToken } from '../utils/jwt.js';
+import { errorResponse } from '../utils/response.js';
+import { User } from '../models/index.js';
 
 /**
  * Authentication Middleware
@@ -38,6 +38,6 @@ const authenticateToken = async (req, res, next) => {
   }
 };
 
-module.exports = {
+export {
   authenticateToken
 };

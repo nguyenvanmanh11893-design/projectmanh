@@ -1,6 +1,6 @@
-const { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
-const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
-const { s3Client, S3_BUCKET_NAME } = require('../config/aws');
+import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { s3Client, S3_BUCKET_NAME } from '../config/aws.js';
 
 /**
  * Upload binary file buffer to Amazon S3
@@ -42,7 +42,7 @@ const deleteFromS3 = async ({ key }) => {
   return await s3Client.send(command);
 };
 
-module.exports = {
+export {
   uploadToS3,
   generatePresignedDownloadUrl,
   deleteFromS3

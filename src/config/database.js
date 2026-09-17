@@ -1,4 +1,4 @@
-const { Sequelize } = require('sequelize');
+import { Sequelize } from 'sequelize';
 
 const sequelize = new Sequelize(
   process.env.DB_NAME || 'cloud_file_manager',
@@ -38,7 +38,7 @@ const testConnection = async () => {
   }
 };
 
-module.exports = {
+export {
   sequelize,
   testConnection
 };

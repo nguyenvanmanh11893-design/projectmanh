@@ -1,7 +1,7 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const folderController = require('../controllers/folder.controller');
-const { authenticateToken } = require('../middleware/auth.middleware');
+import * as folderController from '../controllers/folder.controller.js';
+import { authenticateToken } from '../middleware/auth.middleware.js';
 router.use(authenticateToken);
 
 router.post('/', folderController.create);
@@ -10,4 +10,4 @@ router.get('/:id', folderController.getById);
 router.put('/:id', folderController.rename);
 router.delete('/:id', folderController.remove);
 
-module.exports = router;
+export default router;

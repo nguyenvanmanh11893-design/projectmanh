@@ -1,7 +1,7 @@
-const path = require('path');
-const { v4: uuidv4 } = require('uuid');
-const { File, Folder } = require('../models');
-const s3Service = require('./s3.service');
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { File, Folder } from '../models/index.js';
+import * as s3Service from './s3.service.js';
 
 /**
  * Upload file & save metadata
@@ -26,7 +26,7 @@ const uploadFile = async (userId, { file, folder_id }) => {
     }
   }
 
-  const fileId = uuidv4();
+  const fileId = randomUUID();
   const originalName = file.originalname;
   const extension = path.extname(originalName).toLowerCase().replace('.', '');
   const mimeType = file.mimetype || 'application/octet-stream';
@@ -228,7 +228,7 @@ const deleteFile = async (userId, fileId) => {
   return true;
 };
 
-module.exports = {
+export {
   uploadFile,
   listFiles,
   getDownloadUrl,

@@ -1,5 +1,5 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+import { DataTypes } from 'sequelize';
+import { sequelize } from '../config/database.js';
 
 const Folder = sequelize.define('Folder', {
   id: {
@@ -26,4 +26,4 @@ const Folder = sequelize.define('Folder', {
   underscored: true
 });
 
-module.exports = Folder;
+export default Folder;

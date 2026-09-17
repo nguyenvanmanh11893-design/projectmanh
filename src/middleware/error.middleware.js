@@ -1,4 +1,4 @@
-const { errorResponse } = require('../utils/response');
+import { errorResponse } from '../utils/response.js';
 
 /**
  * 404 Not Found Middleware
@@ -20,7 +20,7 @@ const errorHandler = (err, req, res, next) => {
   return errorResponse(res, message, statusCode, process.env.NODE_ENV === 'development' ? err.stack : null);
 };
 
-module.exports = {
+export {
   notFoundHandler,
   errorHandler
 };
