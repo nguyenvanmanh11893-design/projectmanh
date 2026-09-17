@@ -69,4 +69,17 @@ const validateUploadPayload = (req, res, next) => {
   try { assertOptionalUuid(req.body.folder_id, 'folder_id'); next(); } catch (error) { next(error); }
 };
 
-export { isUuid, validateFileList, validateIdParam, validateFolderPayload, validateFileNamePayload, validateMovePayload, validateUploadPayload };
+const validateUploadSessionPayload = (req, res, next) => {
+  try {
+    assertObject(req.body, 'body');
+    const key = req.get('Idempotency-Key');
+    if (typeof key !== 'string' || !key.trim() || key.length > 255) throw badRequest('Idempotency-Key header is required and must be at most 255 characters');
+    if (!Number.isSafeInteger(req.body.requested_size) || req.body.requested_size < 1 || req.body.requested_size > 50 * 1024 * 1024) throw badRequest('requested_size must be an integer between 1 and 52428800');
+    if (typeof req.body.declared_mime_type !== 'string' || !['application/pdf', 'image/jpeg', 'image/png', 'text/plain'].includes(req.body.declared_mime_type.toLowerCase())) throw badRequest('declared_mime_type is not allowed');
+    assertOptionalUuid(req.body.folder_id, 'folder_id');
+    req.body = { requested_size: req.body.requested_size, declared_mime_type: req.body.declared_mime_type.toLowerCase(), folder_id: req.body.folder_id || null };
+    next();
+  } catch (error) { next(error); }
+};
+
+export { isUuid, validateFileList, validateIdParam, validateFolderPayload, validateFileNamePayload, validateMovePayload, validateUploadPayload, validateUploadSessionPayload };

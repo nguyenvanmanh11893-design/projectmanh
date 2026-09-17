@@ -43,7 +43,10 @@ const User = sequelize.define('User', {
     defaultValue: true,
     allowNull: false
   },
-  quota_bytes: unsignedBigIntAttribute(DataTypes, 'quota_bytes'),
+  // Keep ORM-created users aligned with the schema default of 1 GiB. Without
+  // this explicit override Sequelize's generic unsigned-BIGINT default (0)
+  // would be sent during User.create and bypass MySQL's column default.
+  quota_bytes: { ...unsignedBigIntAttribute(DataTypes, 'quota_bytes'), defaultValue: '1073741824' },
   used_bytes: unsignedBigIntAttribute(DataTypes, 'used_bytes'),
   reserved_bytes: unsignedBigIntAttribute(DataTypes, 'reserved_bytes')
 }, {

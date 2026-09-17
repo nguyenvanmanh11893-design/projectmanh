@@ -1,3 +1,6 @@
+// The migration command is invoked directly (unlike src/server.js), so it
+// must load the selected local environment before importing Sequelize.
+import 'dotenv/config';
 import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';

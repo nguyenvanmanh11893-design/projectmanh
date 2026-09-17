@@ -2,7 +2,37 @@
 
 ## Current phase
 
-**Phase 4 - File/folder business APIs: implemented (unit/static-test scope).** No MySQL instance, browser E2E environment, or AWS environment was accessed in this phase.
+**Phase 5A - Quota and upload sessions: implemented (unit/static-test scope).** No MySQL test instance, browser E2E environment, or AWS environment was accessed in this phase.
+
+## Phase 5A completed
+
+- Added `POST /api/uploads`, requiring `Idempotency-Key`, and `GET /api/uploads/:id`. The create payload is `requested_size`, `declared_mime_type`, and optional `folder_id`; it accepts only the approved MIME declarations and the 50 MiB maximum. It intentionally does not call S3 or issue a presigned POST.
+- Added `GET /api/storage/usage`, returning exact decimal-string `quota_bytes`, `used_bytes`, `reserved_bytes`, and `available_bytes`.
+- Added a transactional quota service. It locks the user's row before checking/updating quota, active-session count, and idempotency record; destination folders are ownership-checked and locked. It enforces `used + reserved + requested <= quota`, a maximum of three active sessions, and defaults to the existing 1 GiB schema quota.
+- Session states are `RESERVED`, `UPLOADING`, `COMPLETED`, `REJECTED`, `EXPIRED`, and `CANCELLED`. Expired active sessions are marked `EXPIRED` and released during the user's next create/read/usage/commit transaction. `reserveQuota`, `releaseQuota`, and `commitQuota` are idempotent and avoid negative reservation counters.
+- The `incoming_key` is an internal schema-required identifier only; it is not exposed as an S3 capability and no presigned POST contract has been introduced. Existing file download continues to require `READY`, so `PENDING` files cannot download.
+
+## Phase 5A files changed
+
+- `src/models/User.js`, `src/services/quota.service.js` - ORM default 1 GiB quota; locking, expiry, quota reservation/release/commit, session ownership lookup, and usage calculations.
+- `src/controllers/{upload,storage}.controller.js`, `src/routes/{upload,storage}.routes.js`, `src/app.js` - new protected endpoints.
+- `scripts/migrate.js`, `package.json` - direct migration and test commands now load `.env`, so they use the selected disposable test database rather than Sequelize's fallback database name.
+- `src/middleware/validation.middleware.js`, `src/config/swagger-docs.js`, `.env.example` - request/config/API contract documentation.
+- `test/phase5a.test.js` - reservation race, idempotent retry, double release, cross-user read denial, and pending-download coverage.
+
+## Phase 5A verification
+
+| Command/check | Result |
+| --- | --- |
+| `node --check src/services/quota.service.js src/controllers/upload.controller.js src/controllers/storage.controller.js src/routes/upload.routes.js src/routes/storage.routes.js` | Passed. |
+| `npm test` | Passed: 23 tests; 1 opt-in real-MySQL test skipped. The test command loads `.env`; the integration test runs when `MYSQL_TEST_ENABLED=true` and `DB_*` target a disposable migrated MySQL database. Expected Phase 1 S3 failure-injection logs appeared. |
+| `git diff --check` | Passed. |
+| MySQL concurrency integration | Not run: no separately configured disposable MySQL test database is available. `test/phase5a.mysql.test.js` is ready to execute the required two-transaction quota/idempotency/release/ownership scenario once that environment is supplied. |
+
+## Conditions to start Phase 5B
+
+- Run migrations and the Phase 5A concurrent reservation/idempotency/release/ownership scenarios against a disposable MySQL database.
+- Define and review the S3 presigned-POST policy, CORS exposure of `versionId`, and exact-object HEAD/version contract before issuing direct-upload credentials.
 
 ## Phase 4 completed
 

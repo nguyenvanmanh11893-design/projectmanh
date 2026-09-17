@@ -337,4 +337,54 @@
  *     responses:
  *       200:
  *         description: The caller's safe audit events only
+ *
+ * /api/uploads:
+ *   post:
+ *     summary: Reserve quota and create an upload session (no S3 POST is issued yet)
+ *     tags: [Uploads]
+ *     security:
+ *       - sessionCookie: []
+ *     parameters:
+ *       - in: header
+ *         name: Idempotency-Key
+ *         required: true
+ *         schema: { type: string, maxLength: 255 }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [requested_size, declared_mime_type]
+ *             properties:
+ *               requested_size: { type: integer, minimum: 1, maximum: 52428800 }
+ *               declared_mime_type: { type: string, enum: [application/pdf, image/jpeg, image/png, text/plain] }
+ *               folder_id: { type: string, nullable: true }
+ *     responses:
+ *       201: { description: Upload session reserved }
+ *       409: { description: Quota, active-session limit, or idempotency conflict }
+ *
+ * /api/uploads/{id}:
+ *   get:
+ *     summary: Get an upload session owned by the caller
+ *     tags: [Uploads]
+ *     security:
+ *       - sessionCookie: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Upload session }
+ *       404: { description: Session not found or not owned by caller }
+ *
+ * /api/storage/usage:
+ *   get:
+ *     summary: Get the calling user's storage counters
+ *     tags: [Storage]
+ *     security:
+ *       - sessionCookie: []
+ *     responses:
+ *       200: { description: Exact decimal-string quota, used, reserved, and available byte counters }
  */

@@ -16,6 +16,8 @@ import userRoutes from './routes/user.routes.js';
 import folderRoutes from './routes/folder.routes.js';
 import fileRoutes from './routes/file.routes.js';
 import activityRoutes from './routes/activity.routes.js';
+import uploadRoutes from './routes/upload.routes.js';
+import storageRoutes from './routes/storage.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -54,6 +56,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/folders', folderRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/activity', activityRoutes);
+app.use('/api/uploads', uploadRoutes);
+app.use('/api/storage', storageRoutes);
 
 app.use(notFoundHandler); 
 
