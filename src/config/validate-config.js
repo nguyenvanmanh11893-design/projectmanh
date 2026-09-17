@@ -1,4 +1,4 @@
-const requiredProductionConfig = ['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'JWT_SECRET', 'AWS_REGION', 'AWS_S3_BUCKET'];
+const requiredProductionConfig = ['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'AWS_REGION', 'AWS_S3_BUCKET', 'APP_ORIGIN'];
 
 const validateConfig = (env = process.env) => {
   if (env.NODE_ENV !== 'production') return;

@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
   // Global State
-  let authToken = localStorage.getItem('token') || null;
+  let csrfToken = null;
   let currentUser = null;
   let currentFolderId = null; // null means Root
   let breadcrumbStack = [{ id: null, name: 'My Drive' }];
@@ -60,21 +60,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // API Call Wrapper
   async function apiFetch(endpoint, options = {}) {
-    const headers = options.headers || {};
-    if (authToken) {
-      headers['Authorization'] = `Bearer ${authToken}`;
-    }
+    const headers = { ...(options.headers || {}) };
     if (!(options.body instanceof FormData)) {
       headers['Content-Type'] = 'application/json';
     }
+    if (!['GET', 'HEAD', 'OPTIONS'].includes((options.method || 'GET').toUpperCase()) && csrfToken) headers['X-CSRF-Token'] = csrfToken;
 
     try {
-      const response = await fetch(endpoint, { ...options, headers });
+      const response = await fetch(endpoint, { ...options, headers, credentials: 'same-origin' });
       const data = await response.json();
 
       if (!response.ok) {
         if (response.status === 401) {
-          logout();
+          resetClientSession();
         }
         throw new Error(data.message || 'API request failed');
       }
@@ -108,9 +106,8 @@ document.addEventListener('DOMContentLoaded', () => {
         body: JSON.stringify({ username, password })
       });
 
-      authToken = res.data.token;
       currentUser = res.data.user;
-      localStorage.setItem('token', authToken);
+      csrfToken = res.data.csrf_token;
 
       initApp();
     } catch (err) {
@@ -124,11 +121,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const username = document.getElementById('regUsername').value;
     const email = document.getElementById('regEmail').value;
     const password = document.getElementById('regPassword').value;
+    const invitation_token = document.getElementById('regInvitationToken').value;
 
     try {
       await apiFetch('/api/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ full_name, username, email, password })
+        body: JSON.stringify({ full_name, username, email, password, invitation_token })
       });
 
       alert('Registration successful! Please sign in.');
@@ -140,26 +138,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
   logoutBtn.addEventListener('click', logout);
 
-  function logout() {
-    authToken = null;
+  function resetClientSession() {
+    csrfToken = null;
     currentUser = null;
-    localStorage.removeItem('token');
     appContainer.classList.add('hidden');
     authContainer.classList.remove('hidden');
   }
 
-  async function checkAuth() {
-    if (!authToken) {
-      authContainer.classList.remove('hidden');
-      return;
-    }
+  async function logout() {
+    try {
+      if (csrfToken) await apiFetch('/api/auth/logout', { method: 'POST' });
+    } catch (err) { console.error(err); } finally { resetClientSession(); }
+  }
 
+  async function checkAuth() {
     try {
       const res = await apiFetch('/api/auth/me');
       currentUser = res.data;
+      const csrf = await apiFetch('/api/auth/csrf');
+      csrfToken = csrf.data.csrf_token;
       initApp();
     } catch (err) {
-      logout();
+      resetClientSession();
     }
   }
 
@@ -416,6 +416,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('currentPassword').value = '';
     document.getElementById('newPassword').value = '';
     closeModal(profileModal);
+    resetClientSession();
   });
 
   // Start App Check

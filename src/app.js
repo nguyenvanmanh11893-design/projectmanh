@@ -25,7 +25,8 @@ app.use(requestId);
 app.use(helmet({
   contentSecurityPolicy: false 
 }));
-app.use(cors());
+app.use(cors({ origin: process.env.APP_ORIGIN || true, credentials: true }));
+app.set('trust proxy', process.env.TRUST_PROXY === 'true');
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

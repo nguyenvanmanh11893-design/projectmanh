@@ -19,17 +19,17 @@ const swaggerDefinition = {
   ],
   components: {
     securitySchemes: {
-      bearerAuth: {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        description: 'Enter your JWT token in the format: Bearer <token>'
+      sessionCookie: {
+        type: 'apiKey',
+        in: 'cookie',
+        name: 'session',
+        description: 'HttpOnly server-side session cookie issued by login'
       }
     }
   },
   security: [
     {
-      bearerAuth: []
+      sessionCookie: []
     }
   ]
 };

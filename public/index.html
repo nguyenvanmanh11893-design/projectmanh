@@ -56,7 +56,11 @@
           </div>
           <div class="form-group">
             <label>Password</label>
-            <input type="password" id="regPassword" class="form-control" placeholder="••••••••" required minlength="6">
+            <input type="password" id="regPassword" class="form-control" placeholder="At least 12 characters, upper/lowercase and number" required minlength="12" maxlength="72">
+          </div>
+          <div class="form-group">
+            <label>Invitation Token</label>
+            <input type="text" id="regInvitationToken" class="form-control" required autocomplete="off">
           </div>
           <button type="submit" class="btn btn-primary">Register</button>
         </form>

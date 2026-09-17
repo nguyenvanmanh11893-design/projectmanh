@@ -1,65 +1,44 @@
 import bcrypt from 'bcryptjs';
 import { Op } from 'sequelize';
-import { User } from '../models/index.js';
-import { signToken } from '../utils/jwt.js';
+import { sequelize, User, Invitation } from '../models/index.js';
+import { AppError } from '../utils/app-error.js';
+import { assertPasswordPolicy } from '../utils/password-policy.js';
+import { hash } from './session.service.js';
+
+const genericCredentialError = () => new AppError('Invalid username/email or password', { statusCode: 401, code: 'INVALID_CREDENTIALS' });
+const DUMMY_BCRYPT_HASH = '$2a$10$7EqJtq98hPqEX7fNZaFWoO5sp2DnIAalTUAezolrqsnBMLJ7Z5e9m';
 
 /**
  * Register a new User
  */
-const register = async ({ username, email, password, full_name }) => {
-  if (!username || !email || !password) {
-    const err = new Error('Username, email, and password are required');
-    err.statusCode = 400;
-    throw err;
+const register = async ({ username, email, password, full_name, invitation_token }) => {
+  if (!username || !email || !password || !invitation_token) {
+    throw new AppError('Username, email, password, and invitation token are required', { statusCode: 400, code: 'REGISTRATION_INVALID' });
   }
-
-  if (password.length < 6) {
-    const err = new Error('Password must be at least 6 characters long');
-    err.statusCode = 400;
-    throw err;
-  }
-
-  const existingUser = await User.findOne({
-    where: {
-      [Op.or]: [{ username }, { email }]
+  assertPasswordPolicy(password);
+  return sequelize.transaction(async (transaction) => {
+    const invitation = await Invitation.findOne({ where: { code_hash: hash(invitation_token) }, transaction, lock: transaction.LOCK.UPDATE });
+    if (!invitation || invitation.used_at || invitation.expires_at <= new Date() || (invitation.email && invitation.email.toLowerCase() !== email.toLowerCase())) {
+      throw new AppError('Invitation is invalid or expired', { statusCode: 400, code: 'INVITATION_INVALID' });
     }
+    const existingUser = await User.findOne({ where: { [Op.or]: [{ username }, { email }] }, transaction, lock: transaction.LOCK.UPDATE });
+    if (existingUser) throw new AppError('Username or email is already registered', { statusCode: 409, code: 'REGISTRATION_CONFLICT' });
+    const password_hash = await bcrypt.hash(password, 12);
+    const newUser = await User.create({ username, email, password_hash, full_name: full_name || null, role: invitation.role, is_active: true }, { transaction });
+    invitation.used_at = new Date();
+    invitation.used_by_user_id = newUser.id;
+    await invitation.save({ transaction });
+    const userJson = newUser.toJSON();
+    delete userJson.password_hash;
+    return userJson;
   });
-
-  if (existingUser) {
-    const err = new Error(
-      existingUser.username === username ? 'Username already exists' : 'Email already registered'
-    );
-    err.statusCode = 409;
-    throw err;
-  }
-
-  const salt = await bcrypt.genSalt(10);
-  const password_hash = await bcrypt.hash(password, salt);
-
-  const newUser = await User.create({
-    username,
-    email,
-    password_hash,
-    full_name: full_name || null,
-    role: 'user',
-    is_active: true
-  });
-
-  const userJson = newUser.toJSON();
-  delete userJson.password_hash;
-
-  return userJson;
 };
 
 /**
  * Login User by username or email
  */
 const login = async ({ usernameOrEmail, password }) => {
-  if (!usernameOrEmail || !password) {
-    const err = new Error('Username/email and password are required');
-    err.statusCode = 400;
-    throw err;
-  }
+  if (!usernameOrEmail || !password) throw genericCredentialError();
 
   const user = await User.findOne({
     where: {
@@ -70,39 +49,13 @@ const login = async ({ usernameOrEmail, password }) => {
     }
   });
 
-  if (!user) {
-    const err = new Error('Invalid credentials');
-    err.statusCode = 401;
-    throw err;
-  }
-
-  if (!user.is_active) {
-    const err = new Error('Account is deactivated');
-    err.statusCode = 403;
-    throw err;
-  }
-
-  const isMatch = await bcrypt.compare(password, user.password_hash);
-  if (!isMatch) {
-    const err = new Error('Invalid credentials');
-    err.statusCode = 401;
-    throw err;
-  }
-
-  const token = signToken({
-    id: user.id,
-    username: user.username,
-    email: user.email,
-    role: user.role
-  });
+  const isMatch = await bcrypt.compare(password, user?.password_hash || DUMMY_BCRYPT_HASH);
+  if (!user || !user.is_active || !isMatch) throw genericCredentialError();
 
   const userJson = user.toJSON();
   delete userJson.password_hash;
 
-  return {
-    token,
-    user: userJson
-  };
+  return userJson;
 };
 
 /**

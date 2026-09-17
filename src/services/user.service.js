@@ -1,5 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { User } from '../models/index.js';
+import { assertPasswordPolicy } from '../utils/password-policy.js';
+import { revokeUserSessions } from './session.service.js';
 
 /**
  * Update Profile (only full_name and avatar_url)
@@ -35,11 +37,7 @@ const changePassword = async (userId, { current_password, new_password }) => {
     throw err;
   }
 
-  if (new_password.length < 6) {
-    const err = new Error('New password must be at least 6 characters long');
-    err.statusCode = 400;
-    throw err;
-  }
+  assertPasswordPolicy(new_password, 'New password');
 
   const user = await User.findByPk(userId);
 
@@ -61,6 +59,7 @@ const changePassword = async (userId, { current_password, new_password }) => {
   const salt = await bcrypt.genSalt(10);
   user.password_hash = await bcrypt.hash(new_password, salt);
   await user.save();
+  await revokeUserSessions(userId);
 
   return true;
 };

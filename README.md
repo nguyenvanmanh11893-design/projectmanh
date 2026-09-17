@@ -12,10 +12,10 @@ Cloud File Manager is a personal file management web application allowing users 
 
 ## 🚀 Key Features
 
-* 🔐 **Authentication & Authorization**: User registration, login with JWT tokens, password hashing with `bcrypt`, user profile management, password updates.
+* 🔐 **Authentication & Authorization**: Invitation-only registration and opaque server-side sessions in an HttpOnly cookie, with bcrypt password hashing and CSRF protection.
 * 📁 **Folder Management**: Create root & nested folders, rename folders, delete folders, list hierarchical contents.
 * 📄 **File Operations**: Multi-part file upload to AWS S3, metadata storage in MySQL, rename files, move files across folders, download files via S3 Presigned URLs, safe file deletion.
-* 🛡️ **Strict Multi-tenant Security**: Users can strictly only view, modify, and access their own files and folders. `user_id` is parsed directly from validated JWT payload (`req.user.id`).
+* 🛡️ **Strict Multi-tenant Security**: Users can strictly only view, modify, and access their own files and folders. `user_id` is resolved from a validated server-side session (`req.user.id`).
 * 📖 **Swagger API Docs**: Built-in interactive OpenAPI / Swagger documentation (`/api-docs`).
 
 ---
@@ -25,7 +25,7 @@ Cloud File Manager is a personal file management web application allowing users 
 * **Backend Framework**: Node.js & Express.js
 * **Database & ORM**: MySQL (XAMPP local dev) with Sequelize ORM
 * **Cloud Storage**: Amazon S3 via `@aws-sdk/client-s3` (v3)
-* **Security & Auth**: JWT (`jsonwebtoken`), `bcryptjs`, `cors`, `helmet`
+* **Security & Auth**: Server-side sessions, `bcryptjs`, `cors`, `helmet`
 * **File Upload**: `multer`
 * **API Documentation**: Swagger UI Express (`swagger-ui-express`, `swagger-jsdoc`)
 
@@ -51,7 +51,7 @@ cloud-file-manager/
 │   │   └── file.controller.js       # File Upload, Download Presigned URL, Move, Delete
 │   │
 │   ├── middleware/
-│   │   ├── auth.middleware.js       # JWT validation middleware
+│   │   ├── auth.middleware.js       # Server-side session validation middleware
 │   │   ├── error.middleware.js      # Global & 404 error handler
 │   │   └── upload.middleware.js     # Multer memory configuration
 │   │
@@ -75,7 +75,7 @@ cloud-file-manager/
 │   │   └── s3.service.js            # AWS S3 PutObject, GetObject Presigned URL, DeleteObject
 │   │
 │   ├── utils/
-│   │   ├── jwt.js                   # JWT sign / verify helpers
+│   │   ├── password-policy.js       # Bcrypt-safe password policy
 │   │   └── response.js              # Standard API response utility
 │   │
 │   ├── app.js                       # Express app configuration & middleware

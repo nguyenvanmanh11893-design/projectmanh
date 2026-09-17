@@ -20,12 +20,13 @@
  *         application/json:
  *           schema:
  *             type: object
- *             required: [username, email, password]
+ *             required: [username, email, password, invitation_token]
  *             properties:
  *               username: { type: string, example: "manh" }
  *               email: { type: string, example: "manh@gmail.com" }
- *               password: { type: string, example: "12345678" }
+ *               password: { type: string, example: "ValidPassword1" }
  *               full_name: { type: string, example: "Nguyen Van Manh" }
+ *               invitation_token: { type: string }
  *     responses:
  *       201:
  *         description: Registration successful
@@ -45,10 +46,10 @@
  *             properties:
  *               username: { type: string, example: "manh" }
  *               email: { type: string, example: "manh@gmail.com" }
- *               password: { type: string, example: "12345678" }
+ *               password: { type: string, example: "ValidPassword1" }
  *     responses:
  *       200:
- *         description: Returns JWT token
+ *         description: Sets an HttpOnly session cookie and returns a CSRF token
  * 
  * /api/auth/me:
  *   get:
@@ -56,7 +57,7 @@
  *     tags:
  *       - Auth
  *     security:
- *       - bearerAuth: []
+ *       - sessionCookie: []
  *     responses:
  *       200:
  *         description: User profile details
@@ -67,7 +68,7 @@
  *     tags:
  *       - User
  *     security:
- *       - bearerAuth: []
+ *       - sessionCookie: []
  *     requestBody:
  *       content:
  *         application/json:
@@ -86,7 +87,7 @@
  *     tags:
  *       - User
  *     security:
- *       - bearerAuth: []
+ *       - sessionCookie: []
  *     requestBody:
  *       required: true
  *       content:
@@ -107,7 +108,7 @@
  *     tags:
  *       - Folders
  *     security:
- *       - bearerAuth: []
+ *       - sessionCookie: []
  *     requestBody:
  *       required: true
  *       content:
@@ -126,7 +127,7 @@
  *     tags:
  *       - Folders
  *     security:
- *       - bearerAuth: []
+ *       - sessionCookie: []
  *     responses:
  *       200:
  *         description: List of root folders
@@ -137,7 +138,7 @@
  *     tags:
  *       - Folders
  *     security:
- *       - bearerAuth: []
+ *       - sessionCookie: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -151,7 +152,7 @@
  *     tags:
  *       - Folders
  *     security:
- *       - bearerAuth: []
+ *       - sessionCookie: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -174,7 +175,7 @@
  *     tags:
  *       - Folders
  *     security:
- *       - bearerAuth: []
+ *       - sessionCookie: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -190,7 +191,7 @@
  *     tags:
  *       - Files
  *     security:
- *       - bearerAuth: []
+ *       - sessionCookie: []
  *     requestBody:
  *       required: true
  *       content:
@@ -214,7 +215,7 @@
  *     tags:
  *       - Files
  *     security:
- *       - bearerAuth: []
+ *       - sessionCookie: []
  *     parameters:
  *       - in: query
  *         name: folder_id
@@ -230,7 +231,7 @@
  *     tags:
  *       - Files
  *     security:
- *       - bearerAuth: []
+ *       - sessionCookie: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -246,7 +247,7 @@
  *     tags:
  *       - Files
  *     security:
- *       - bearerAuth: []
+ *       - sessionCookie: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -269,7 +270,7 @@
  *     tags:
  *       - Files
  *     security:
- *       - bearerAuth: []
+ *       - sessionCookie: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -285,7 +286,7 @@
  *     tags:
  *       - Files
  *     security:
- *       - bearerAuth: []
+ *       - sessionCookie: []
  *     parameters:
  *       - in: path
  *         name: id

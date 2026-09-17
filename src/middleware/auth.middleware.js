@@ -1,43 +1,36 @@
-import { verifyToken } from '../utils/jwt.js';
 import { errorResponse } from '../utils/response.js';
-import { User } from '../models/index.js';
+import { getActiveSession } from '../services/session.service.js';
 
 /**
  * Authentication Middleware
- * Validates Bearer JWT Token in Authorization header
+ * Validates an opaque server-side session from an HttpOnly cookie.
  */
 const authenticateToken = async (req, res, next) => {
   try {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+    const token = parseCookies(req.headers.cookie || '').session;
 
     if (!token) {
-      return errorResponse(res, { message: 'Access token is missing or invalid', statusCode: 401, code: 'UNAUTHORIZED' });
+      return errorResponse(res, { message: 'Authentication is required', statusCode: 401, code: 'UNAUTHORIZED' });
     }
 
-    const decoded = verifyToken(token);
-
-    if (!decoded || !decoded.id) {
-      return errorResponse(res, { message: 'Invalid token payload', statusCode: 401, code: 'UNAUTHORIZED' });
+    const active = await getActiveSession(token);
+    if (!active) {
+      return errorResponse(res, { message: 'Session has expired or is no longer valid', statusCode: 401, code: 'UNAUTHORIZED' });
     }
-
-    // Attach decoded user info strictly to req.user
-    req.user = {
-      id: decoded.id,
-      username: decoded.username,
-      email: decoded.email,
-      role: decoded.role
-    };
-
-    next();
+    req.session = active.session;
+    req.user = active.user.toJSON();
+    return next();
   } catch (error) {
-    if (error.name === 'TokenExpiredError') {
-      return errorResponse(res, { message: 'Token has expired. Please log in again.', statusCode: 401, code: 'UNAUTHORIZED' });
-    }
-    return errorResponse(res, { message: 'Authentication failed. Invalid token.', statusCode: 401, code: 'UNAUTHORIZED' });
+    return errorResponse(res, { message: 'Authentication failed', statusCode: 401, code: 'UNAUTHORIZED' });
   }
 };
 
+const parseCookies = (header) => Object.fromEntries(header.split(';').map((part) => {
+  const index = part.indexOf('=');
+  return index < 0 ? [] : [part.slice(0, index).trim(), decodeURIComponent(part.slice(index + 1).trim())];
+}).filter((pair) => pair.length));
+
 export {
-  authenticateToken
+  authenticateToken,
+  parseCookies
 };
