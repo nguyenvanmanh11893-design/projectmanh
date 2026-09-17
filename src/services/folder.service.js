@@ -67,7 +67,7 @@ const getFolderById = async (userId, folderId) => {
       {
         model: File,
         as: 'files',
-        where: { status: 'completed' },
+        where: { status: 'LEGACY_UNVERIFIED' },
         required: false,
         order: [['file_name', 'ASC']]
       }
@@ -129,8 +129,8 @@ const deleteFolder = async (userId, folderId) => {
     throw err;
   }
 
-  // Deleting folder will cascade delete subfolders due to FK constraint,
-  // and set files' folder_id to NULL or CASCADE based on design.
+  // Phase 2 ownership FKs restrict deletion while files reference this folder.
+  // The explicit empty-folder business rule is implemented in Phase 4.
   await folder.destroy();
   return true;
 };

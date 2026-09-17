@@ -119,6 +119,17 @@ The system uses strictly 3 relational tables in MySQL:
    ```
    Fill in your local MySQL credentials and AWS S3 configuration details.
 
+### Database bootstrap and upgrades
+
+Use forward-only migrations for every new database and upgrade. Do **not** run `database/cloud_file_manager.sql` to upgrade a database because it is a destructive legacy initializer.
+
+```bash
+npm run db:migrate
+npm run db:status
+```
+
+See [docs/MIGRATIONS.md](docs/MIGRATIONS.md) for the upgrade/backfill rules and BIGINT JSON contract.
+
 ---
 
 ## 🏃 Running the Application

@@ -54,7 +54,9 @@ const uploadFile = async (userId, { file, folder_id }) => {
     mime_type: mimeType,
     file_size: fileSize,
     extension,
-    status: 'completed'
+    // The legacy multipart endpoint has no Lambda validation/version binding.
+    // Phase 2 therefore never represents its output as READY/completed.
+    status: 'LEGACY_UNVERIFIED'
   });
 
   return newFile;
@@ -66,7 +68,7 @@ const uploadFile = async (userId, { file, folder_id }) => {
 const listFiles = async (userId, folderId = null) => {
   const whereClause = {
     user_id: userId,
-    status: 'completed'
+    status: 'LEGACY_UNVERIFIED'
   };
 
   if (folderId) {
@@ -91,7 +93,7 @@ const getDownloadUrl = async (userId, fileId) => {
     where: {
       id: fileId,
       user_id: userId,
-      status: 'completed'
+      status: 'READY'
     }
   });
 

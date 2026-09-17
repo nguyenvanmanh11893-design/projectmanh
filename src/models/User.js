@@ -1,5 +1,6 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database.js';
+import { unsignedBigIntAttribute } from '../utils/bigint.js';
 
 const User = sequelize.define('User', {
   id: {
@@ -41,7 +42,10 @@ const User = sequelize.define('User', {
     type: DataTypes.BOOLEAN,
     defaultValue: true,
     allowNull: false
-  }
+  },
+  quota_bytes: unsignedBigIntAttribute(DataTypes, 'quota_bytes'),
+  used_bytes: unsignedBigIntAttribute(DataTypes, 'used_bytes'),
+  reserved_bytes: unsignedBigIntAttribute(DataTypes, 'reserved_bytes')
 }, {
   tableName: 'users',
   timestamps: true,

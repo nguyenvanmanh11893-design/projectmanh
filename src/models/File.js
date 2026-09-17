@@ -1,5 +1,6 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/database.js';
+import { unsignedBigIntAttribute } from '../utils/bigint.js';
 
 const File = sequelize.define('File', {
   id: {
@@ -32,20 +33,20 @@ const File = sequelize.define('File', {
     type: DataTypes.STRING(100),
     allowNull: true
   },
-  file_size: {
-    type: DataTypes.BIGINT.UNSIGNED,
-    allowNull: false,
-    defaultValue: 0
-  },
+  file_size: unsignedBigIntAttribute(DataTypes, 'file_size'),
   extension: {
     type: DataTypes.STRING(20),
     allowNull: true
   },
   status: {
-    type: DataTypes.ENUM('uploading', 'completed', 'deleted'),
+    type: DataTypes.ENUM('LEGACY_UNVERIFIED', 'PENDING', 'UPLOADED', 'VALIDATING', 'READY', 'REJECTED', 'TRASHED', 'PURGE_PENDING', 'PURGED'),
     allowNull: false,
-    defaultValue: 'completed'
-  }
+    defaultValue: 'PENDING'
+  },
+  s3_version_id: { type: DataTypes.STRING(1024), allowNull: true },
+  detected_mime_type: { type: DataTypes.STRING(100), allowNull: true },
+  trashed_at: { type: DataTypes.DATE, allowNull: true },
+  purge_requested_at: { type: DataTypes.DATE, allowNull: true }
 }, {
   tableName: 'files',
   timestamps: true,
