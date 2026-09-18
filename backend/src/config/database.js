@@ -1,4 +1,5 @@
 import { Sequelize } from 'sequelize';
+import { readFileSync } from 'node:fs';
 
 const sequelize = new Sequelize(
   process.env.DB_NAME || 'cloud_file_manager',
@@ -8,6 +9,9 @@ const sequelize = new Sequelize(
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT, 10) || 3306,
     dialect: 'mysql',
+    dialectOptions: process.env.DB_SSL_CA
+      ? { ssl: { ca: readFileSync(process.env.DB_SSL_CA, 'utf8'), rejectUnauthorized: true, verifyIdentity: true } }
+      : {},
     logging: process.env.NODE_ENV === 'development' ? (msg) => console.log(`[DB LOG]: ${msg}`) : false,
     define: {
       timestamps: true,

@@ -1,0 +1,6 @@
+# Separately created state bucket, NOT the application bucket. No credentials.
+bucket       = "replace-with-private-terraform-state-bucket"
+key          = "cloud-files/production.tfstate"
+region       = "ap-southeast-1"
+encrypt      = true
+use_lockfile = true

@@ -1,0 +1,15 @@
+name                     = "cloud-files-prod"
+bucket_name              = "replace-with-globally-unique-bucket-name"
+domain                   = "files.example.com"
+az_a                     = "ap-southeast-1a"
+az_b                     = "ap-southeast-1b"
+ami_id                   = "ami-REPLACE_WITH_REVIEWED_AL2023_X86_64"
+mysql_engine_version     = "8.4.7" # Verify availability/support before a future plan.
+instance_type            = "t3.small"
+db_instance_class        = "db.t4g.micro"
+lambda_zip               = "../../build/validator.zip"
+alert_email              = "operations@example.com"
+monthly_budget_usd       = 75 # Alert threshold, not a price quotation or spending cap.
+temporary_retention_days = 30
+github_oidc_provider_arn  = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
+github_repository        = "example/cloud-file-manager"

@@ -2,7 +2,46 @@
 
 ## Current phase
 
-**Phase 7 source implementation complete; BLOCKED for runtime acceptance.** The full explicit unit/fault-injection suite passes 75/75. Migration 006, real InnoDB lock races, and real versioned-S3 list/delete/partial-failure behavior have not been exercised; no deployment was performed. The earlier Phase 6B runtime acceptance gaps also remain.
+**Phase 9 IaC and deployment documentation implemented; NOT DEPLOYED.** Terraform formatting/validation and offline guardrails pass. The explicit backend unit/fault-injection suite passes 76/76. No Terraform plan/apply, AWS resource creation, live DB migration or deployment was performed. Phase 6B/7 runtime acceptance gaps remain; the existing frontend/workspace changes were preserved and are not claimed as work completed by this phase.
+
+## Phase 9 completed (2026-09-18)
+
+- Added Singapore VPC/public EC2 subnet/two private DB subnets, no private internet route, S3 gateway endpoint, HTTPS-only public ingress (plus HTTP ACME/redirect), no SSH, and RDS 3306 restricted to the EC2 SG. RDS is explicitly Single-AZ despite its two-AZ subnet group.
+- Added encrypted RDS with seven-day backups, AWS-managed master password, final-snapshot/deletion guards; encrypted retained EC2 EBS, required IMDSv2 and instance role; private/versioned/TLS-only S3 with origin-specific CORS. Temporary-prefix lifecycle retains incoming/reports 30 days minimum; no objects/ expiration or mandatory VPCE bucket condition.
+- Added outside-VPC validator Lambda, incoming-only S3 notification ordered after invoke permission/failure destination/versioning, encrypted 14-day SQS async failure destination, narrowly scoped EC2/Lambda/GitHub OIDC publisher roles, retained CloudWatch groups, operational SNS/queue/destination alerts and us-east-1 account budget/billing alerts.
+- Added root-owned systemd API/worker templates, Nginx TLS/ACME configuration, CloudWatch agent and logrotate examples, fail-closed in-memory Parameter Store launcher, and full bootstrap/DNS/TLS renewal/retention/cost/teardown runbook. Terraform contains no secret value resources, plaintext passwords or user data. RDS creates its master secret independently; application SecureString bootstrap is a separate operator step.
+- Minimal backend deployment integration: API binds 127.0.0.1; optional DB_SSL_CA loads a trusted CA with issuer and hostname verification. Deployment launcher requires the CA path. Existing Express/Sequelize/MySQL/frontend and business endpoints are preserved.
+- SPEC mismatch documented: the old static-frontend description predates the user's current React/Vite worktree; deployment serves existing frontend/dist with Nginx without rewriting the app or changing SPEC architecture decisions.
+
+## Phase 9 files/modules changed
+
+- `infra/terraform/{versions,variables,network,data,compute,iam,monitoring,outputs}.tf`, `.terraform.lock.hcl`, `.gitignore`, `terraform.tfvars.example`, `backend.hcl.example` — infrastructure, pinned provider and secret-free examples.
+- `infra/tests/check_infra.py` — parsed-HCL security guards plus ten dangerous mutation cases.
+- `deployment/phase9/{README.md,launch.py,test_launch.py,cloud-files@.service,nginx.conf.example,cloudwatch-agent.json.example,logrotate.conf,.gitignore}` — deployment runbook, host configuration and bootstrap tests.
+- `backend/src/server.js`, `backend/src/config/database.js`, `backend/test/phase9.test.js`, `.env.example` — loopback bind, verified RDS TLS and missing-CA failure test/configuration documentation.
+- `docs/IMPLEMENTATION_STATUS.md` — current evidence and remaining gates. Existing unrelated worktree changes were not overwritten; no commit/push was made.
+
+## Phase 9 verification
+
+| Command/check | Result |
+| --- | --- |
+| `terraform -chdir=infra/terraform fmt -recursive` then `fmt -check -recursive` | Passed with Terraform 1.10.5. Tool archive checked against official SHA-256 manifest. |
+| `terraform -chdir=infra/terraform init -backend=false -input=false` | Passed after sandbox network denial and authorized retry. Installed signed AWS provider 5.100.0; generated lockfile. No backend or AWS resources created. |
+| `terraform -chdir=infra/terraform validate -no-color` | Passed: configuration valid. No plan executed; real account values and Lambda ZIP still need review. |
+| `python infra/tests/check_infra.py` with `PYTHONPATH=tmp/phase9-tools/python` | Passed: 2 test methods, including 10 negative mutation subcases (public DB, plaintext password, IMDSv1, SSH, notification loop, objects expiry, VPCE-only browser denial, wrong billing provider, removed retention guard, NAT). Uses python-hcl2 8.1.4 installed in ignored tools directory. Parser v8 normalization was corrected after initial test errors; final run passes. Elevated execution required because sandbox could not read pip-created tool directories. |
+| `python deployment/phase9/test_launch.py` | Passed: 3 tests covering invalid/missing/unsafe config, AWS timeout, rejection of plain String parameters, no execution on failure, and credentials kept out of argv/inherited AWS credentials. No real secret or AWS call. |
+| From `backend/`: `node --test test/phase1.test.js test/phase2.test.js test/phase3.test.js test/phase4.test.js test/phase5a.test.js test/phase5b.test.js test/phase6a.test.js test/phase6b.test.js test/phase7.test.js test/phase9.test.js` | Passed: 76/76 after authorized retry outside sandbox (`spawn EPERM` initially). Explicit files avoid dotenv-loading npm test and the opt-in real MySQL test. Existing fault-injection logs and Node 20 SDK warning appeared. New test checks TLS options/missing CA; it does not prove a real TLS handshake. |
+| `node --check backend/src/server.js`; `node --check backend/src/config/database.js`; `git diff --check` | Passed (Git emitted line-ending warnings). |
+| Plan/apply, AWS IAM/network/S3/Lambda/RDS/SSM acceptance, migrations/concurrency integration, Linux systemd/Nginx/ACME/agent and browser E2E | Not run. No authorized AWS/disposable MySQL/Linux deployment targets were used; Windows host has no Nginx/systemd environment. No production readiness claim. |
+| Checkov/TFLint | Not run: not installed. Provider schema validation and the checked-in HCL guard suite were used; they do not replace a full security scanner or live acceptance. |
+
+## Phase 9 limits and conditions for Phase 10A
+
+- Review actual domain/DNS, Singapore AMI/MySQL version, Lambda release ZIP/Node 22 compatibility, account quotas, email destinations, exact protected GitHub environment/OIDC provider and cost estimate. USD 75 is only an example alert threshold, not a quotation or cap.
+- Bootstrap encrypted versioned state storage/native S3 locking separately, review an eventual plan under separately granted deployment authorization, and preserve data deletion guards. This phase deliberately has no apply or broad infrastructure CI role/pipeline.
+- Bootstrap the runtime DB account/SecureString outside Terraform and migration credentials separately; configure Session Manager/log delivery, DNS/ACME renewal, confirm SNS subscriptions and enable billing metrics in the correct account/region. Runtime credentials remain in process memory only; root on the host remains trusted.
+- Finish Phase 6B/7 disposable MySQL migration/real lock race/worker-kill and exact-version S3 fault tests plus frontend HTTPS acceptance before calling the system production-ready. Static checks do not waive these gates.
+- Phase 10A can extend observability/CI using these reviewed interfaces only when requested; do not add those features during Phase 9. See [Phase 9 deployment runbook](../deployment/phase9/README.md) for detailed acceptance and teardown steps.
 
 ## Phase 7 completed
 

@@ -327,8 +327,6 @@ Test:
 
 ## PHASE 8 — FRONTEND NHÓM A
 
-Giữ frontend hiện tại, không đổi sang React/Vue.
-
 Hoàn thiện:
 - Login/logout và invitation registration.
 - Folder navigation và breadcrumb.

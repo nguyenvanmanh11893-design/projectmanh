@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './config/load-env.js';
 import app from './app.js';
 import { testConnection, sequelize } from './config/database.js';
 import { validateConfig } from './config/validate-config.js';
@@ -17,7 +17,7 @@ const startServer = async () => {
     return;
   }
 
-  const server = app.listen(PORT, () => {
+  const server = app.listen(PORT, '127.0.0.1', () => {
     console.log(`=================================`);
     console.log(`🚀 Server running on port: ${PORT}`);
     console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);

@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './config/load-env.js';
 import { randomUUID } from 'node:crypto';
 import { sequelize } from './config/database.js';
 import { validateConfig } from './config/validate-config.js';

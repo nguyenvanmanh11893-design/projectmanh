@@ -1,0 +1,35 @@
+[Unit]
+Description=Cloud Files %i
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=cloud-files
+Group=cloud-files
+WorkingDirectory=/opt/cloud-files/current
+# Replace NAME with the Terraform name. Instances are server and worker.
+ExecStart=/usr/bin/python3 /opt/cloud-files/launch.py /NAME/runtime /usr/bin/node /opt/cloud-files/current/backend/src/%i.js
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=40
+KillSignal=SIGTERM
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+LimitCORE=0
+StandardOutput=append:/var/log/cloud-files/%i.log
+StandardError=append:/var/log/cloud-files/%i.log
+
+[Install]
+WantedBy=multi-user.target

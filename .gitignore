@@ -26,3 +26,9 @@ Thumbs.db
 # IDE Files
 .vscode/
 .idea/
+
+# Workspace build output and redundant lockfiles
+frontend/dist/
+frontend/*.tsbuildinfo
+/frontend/package-lock.json
+/backend/package-lock.json
