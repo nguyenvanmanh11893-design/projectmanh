@@ -33,3 +33,9 @@ All byte fields are MySQL `BIGINT UNSIGNED`. Sequelize model getters serialize t
 Migration `006-phase7-lifecycle-reconciliation` is additive and restartable after partial MySQL DDL. It adds `files.purged_at`, trash/reference indexes, and `reconciliation_findings`; then it uses dedupe keys to backfill expiry jobs for active upload sessions, seven-day purge jobs for existing trash, and the singleton periodic reconciliation job.
 
 Stop both API and worker before applying it. Rehearse on a disposable database first, including a rerun after an intentionally interrupted DDL step. The migration does not contact S3, purge a file, adjust quota, or delete an orphan.
+
+## Phase 10A correlation migration
+
+Migration `007-phase10a-correlation` adds nullable `jobs.request_id`; it is restartable and does not backfill or alter business state. Old/scheduled jobs remain nullable, and existing applications tolerate the additional column. Rehearse on disposable MySQL before release. The CD workflow runs migrations separately with services stopped. `node backend/scripts/migrate.js check` is a read-only gate that exits nonzero for missing/pending migrations; it never creates schema_migrations or applies DDL. Runtime needs SELECT on that table.
+
+Application rollback does not reverse DDL/backfills. See [delivery and rollback limits](OBSERVABILITY_CICD.md) and [incident runbooks](RUNBOOKS.md). No live migration was performed in Phase 10A.

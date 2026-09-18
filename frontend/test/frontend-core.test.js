@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatBytes, formatDate, formatFileStatus, formatActivityAction } from '../src/lib/formatters.ts';
+import { formatBytes, formatFileStatus, formatActivityAction } from '../src/lib/formatters.ts';
 import { setCsrfToken, getCsrfToken, ApiError } from '../src/lib/api.ts';
 import { ALLOWED_MIME_TYPES, MAX_FILE_SIZE } from '../src/features/uploads/UploadContext.tsx';
 

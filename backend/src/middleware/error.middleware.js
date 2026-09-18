@@ -1,3 +1,4 @@
+import { log } from '../utils/logger.js';
 import { errorResponse } from '../utils/response.js';
 
 /**
@@ -11,7 +12,7 @@ const notFoundHandler = (req, res, next) => {
  * Global Centralized Error Handling Middleware
  */
 const errorHandler = (err, req, res, next) => {
-  console.error(`[SERVER ERROR] request_id=${req.requestId || 'unknown'}:`, err);
+  log('request_failed', { error: err }, 'error');
 
   const statusCode = Number.isInteger(err.statusCode) ? err.statusCode : 500;
   const isClientError = statusCode >= 400 && statusCode < 500;

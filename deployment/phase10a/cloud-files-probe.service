@@ -1,0 +1,10 @@
+[Unit]
+Description=Cloud Files readiness probe
+[Service]
+Type=oneshot
+User=cloud-files
+ExecStart=/usr/bin/python3.12 /opt/cloud-files/probe.py
+StandardOutput=append:/var/log/cloud-files/server.log
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true

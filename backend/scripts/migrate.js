@@ -1,3 +1,4 @@
+import { log } from '../src/utils/logger.js';
 // The migration command is invoked directly (unlike src/server.js), so it
 // must load the selected local environment before importing Sequelize.
 import '../src/config/load-env.js';
@@ -32,26 +33,30 @@ async function appliedIds() {
 
 async function main() {
   const command = process.argv[2] || 'up';
-  if (!['up', 'status'].includes(command)) throw new Error('Usage: node scripts/migrate.js [up|status]');
+  if (!['up', 'status', 'check'].includes(command)) throw new Error('Usage: node scripts/migrate.js [up|status|check]');
   await sequelize.authenticate();
-  await ensureMigrationTable();
+  if (command !== 'check') await ensureMigrationTable();
   const migrations = await loadMigrations();
   const applied = await appliedIds();
+  if (command === 'check') {
+    if (migrations.some((migration) => !applied.has(migration.id))) throw new Error('Pending migrations');
+    return;
+  }
   if (command === 'status') {
-    for (const migration of migrations) console.log(`${applied.has(migration.id) ? 'applied' : 'pending'}  ${migration.id}`);
+    for (const migration of migrations) log('migration_status', { migration_id: migration.id, status: applied.has(migration.id) ? 'applied' : 'pending' });
     return;
   }
   for (const migration of migrations) {
     if (applied.has(migration.id)) continue;
-    console.log(`Applying ${migration.id}`);
+    log('migration_started', { migration_id: migration.id });
     await migration.up({ sequelize });
     await sequelize.query('INSERT INTO schema_migrations (id) VALUES (?)', { replacements: [migration.id] });
-    console.log(`Applied ${migration.id}`);
+    log('migration_applied', { migration_id: migration.id });
   }
 }
 
 main().catch((error) => {
-  console.error(`Migration failed: ${error.message}`);
+  log('migration_failed', {}, 'error');
   process.exitCode = 1;
 }).finally(async () => {
   await sequelize.close();

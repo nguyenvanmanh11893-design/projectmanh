@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Op } from 'sequelize';
 import { sequelize, User, Folder, UploadSession, Job } from '../models/index.js';
-import { AppError, badRequest } from '../utils/app-error.js';
+import { AppError } from '../utils/app-error.js';
 
 export const DEFAULT_QUOTA_BYTES = 1024n * 1024n * 1024n;
 export const MAX_FILE_SIZE_BYTES = 50n * 1024n * 1024n;

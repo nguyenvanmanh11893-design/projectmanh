@@ -1,3 +1,4 @@
+import { log } from '../utils/logger.js';
 import { createHash } from 'node:crypto';
 import { sequelize, User, UploadSession, File, Job, AuditEvent } from '../models/index.js';
 import { recordAuditEvent } from './audit.service.js';
@@ -28,6 +29,7 @@ export const validateReport = (report, session, bucket) => {
     || (report.status === 'REJECTED' && report.reason_code === 'VALID')) {
     throw new InvalidReportError('Invalid validator report');
   }
+  log('validator_report_verified', { report_id: report.report_id });
   return report;
 };
 
@@ -93,6 +95,7 @@ export const createFinalizeUploadService = ({ sequelizeInstance = sequelize, Use
     });
 
     if ((await transition()).terminal) return { terminal: true };
+    log('validator_report_requested', { report_id: reportId({ bucket, key: snapshot.incoming_key, versionId: snapshot.source_version_id }) });
     let parsed;
     try { parsed = JSON.parse(await storage.getObjectText({ key: `processing-results/${reportId({ bucket, key: snapshot.incoming_key, versionId: snapshot.source_version_id })}.json` })); }
     catch (error) { if (error instanceof SyntaxError) throw new InvalidReportError('Validator report is not JSON'); throw error; }

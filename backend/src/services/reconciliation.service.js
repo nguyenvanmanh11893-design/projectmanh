@@ -6,7 +6,6 @@ const ACTIVE_UPLOADS = ['RESERVED', 'UPLOADING', 'UPLOADED'];
 const USED_FILE_STATES = ['READY', 'TRASHED', 'PURGE_PENDING'];
 const fingerprint = (...parts) => createHash('sha256').update(parts.join('\0')).digest('hex');
 const plain = (row) => row?.get ? row.get({ plain: true }) : row;
-const unlock = (job) => { job.locked_at = job.locked_until = job.locked_by = job.lease_token = null; };
 
 export const createReconciliationService = ({
   sequelizeInstance = sequelize, UserModel = User, FileModel = File,

@@ -38,7 +38,7 @@ def launch(parameter, command):
         raise ValueError("SecureString required")
     values = runtime_values(parameter_data["Value"])
     env = {"PATH": "/usr/local/bin:/usr/bin:/bin", "NODE_ENV": "production", "PORT": "3000",
-           "AWS_REGION": "ap-southeast-1", "TRUST_PROXY": "true",
+           "LOAD_DOTENV": "false", "AWS_REGION": "ap-southeast-1", "TRUST_PROXY": "true",
            "DB_SSL_CA": "/etc/cloud-files/rds-ca.pem", "ORPHAN_CLEANUP_MODE": "report-only"}
     env.update(values)
     os.execve(command[0], command, env)

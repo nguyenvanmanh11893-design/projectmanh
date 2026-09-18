@@ -1,0 +1,64 @@
+name: CI
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: cloud_files_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping" --health-interval=10s
+          --health-timeout=5s --health-retries=12
+    env:
+      DB_HOST: 127.0.0.1
+      DB_NAME: cloud_files_ci
+      DB_USER: root
+      MYSQL_TEST_ENABLED: 'true'
+      LOAD_DOTENV: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.10.5'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm audit --audit-level=high
+      - run: npm run db:migrate
+      - run: npm run db:migrate
+      - run: npm test
+      - run: python -m pip install python-hcl2==8.1.4
+      - run: python infra/tests/check_infra.py
+      - run: python deployment/phase9/test_launch.py
+      - run: python -m unittest discover -s deployment/phase10a -p 'test_*.py'
+      - run: terraform -chdir=infra/terraform fmt -check -recursive
+      - run: terraform -chdir=infra/terraform init -backend=false -input=false -lockfile=readonly
+      - run: terraform -chdir=infra/terraform validate -no-color
+      - run: npm run build
+      - name: Assemble application artifact with locked production dependencies
+        run: |
+          npm prune --omit=dev --ignore-scripts
+          python deployment/phase10a/artifact.py "$GITHUB_SHA" release-output
+      - uses: actions/upload-artifact@v4
+        with:
+          name: application-${{ github.sha }}
+          path: |
+            release-output/*.tar.gz
+            release-output/*.sha256
+          if-no-files-found: error
+          retention-days: 30

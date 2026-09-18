@@ -24,6 +24,7 @@ resource "aws_iam_role_policy" "app" {
         "kms:ViaService" = "ssm.${local.region}.amazonaws.com", "kms:EncryptionContext:PARAMETER_ARN" = local.parameter_arn
       } } },
       { Effect = "Allow", Action = ["logs:CreateLogStream", "logs:PutLogEvents", "logs:DescribeLogStreams"], Resource = [for group in aws_cloudwatch_log_group.app : "${group.arn}:*"] },
+      { Effect = "Allow", Action = ["cloudwatch:PutMetricData"], Resource = "*", Condition = { StringEquals = { "cloudwatch:namespace" = "CloudFiles/Host" } } },
       # CloudWatch/SSM agent group discovery has no resource-level authorization.
       { Effect = "Allow", Action = ["logs:DescribeLogGroups"], Resource = "*" },
       # These agent APIs do not support per-resource ARNs. No SendCommand or session-start authority.

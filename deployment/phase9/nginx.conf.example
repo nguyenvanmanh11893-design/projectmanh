@@ -1,6 +1,6 @@
 # Install in nginx's http context; replace DOMAIN throughout.
 # Log path without query strings (presigned URLs/session material must not be logged).
-log_format cloud_files '$remote_addr [$time_local] $request_method $uri $status $body_bytes_sent';
+log_format cloud_files escape=json '{"timestamp":"$time_iso8601","method":"$request_method","status":$status,"request_id":"$upstream_http_x_request_id"}';
 server {
     listen 80;
     server_name DOMAIN;
@@ -20,6 +20,10 @@ server {
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy same-origin always;
     client_max_body_size 1m;
+    location /health/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_read_timeout 5s;
+    }
     location /api/ {
         proxy_pass http://127.0.0.1:3000;
         proxy_set_header Host DOMAIN;

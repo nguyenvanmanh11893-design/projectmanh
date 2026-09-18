@@ -86,6 +86,17 @@ def enforce(r):
     policy = r["aws_iam_role_policy.ci"]["policy"]
     require("lambda:UpdateFunctionCode" in policy and "PassRole" not in policy and '"*"' not in policy, "CI scope")
     require("s3:PutObject" in r["aws_iam_role_policy.validator"]["policy"] and "objects/*" not in r["aws_iam_role_policy.validator"]["policy"], "validator cannot finalize")
+    for name, body in r.items():
+        if name.startswith(("aws_cloudwatch_metric_alarm.", "aws_cloudwatch_log_metric_filter.")):
+            require(not any(key in json.dumps(body.get("dimensions", {})) for key in ["user_id", "file_id", "job_id", "request_id"]), "metric cardinality")
+            for transform in body.get("metric_transformation", []):
+                require(not transform.get("dimensions"), "log metric cardinality")
+    require(r["aws_cloudwatch_metric_alarm.api_ready"]["treat_missing_data"] == "breaching", "missing readiness")
+    require(r["aws_cloudwatch_metric_alarm.ops_worker"]["treat_missing_data"] == "breaching", "missing heartbeat")
+    deploy = r["aws_iam_role.deploy"]["assume_role_policy"]
+    require("StringEquals" in deploy and "github_deploy_subject" in deploy and "StringLike" not in deploy, "deploy exact trust")
+    require("AWS-RunShellScript" not in r["aws_iam_role_policy.deploy"]["policy"], "no arbitrary remote shell")
+    require(r["aws_s3_bucket.releases"]["force_destroy"] is False, "retain rollback artifacts")
 
 
 class InfrastructureGuards(unittest.TestCase):
@@ -104,6 +115,9 @@ class InfrastructureGuards(unittest.TestCase):
             ("wrong billing region", lambda r: r["aws_cloudwatch_metric_alarm.billing"].update(provider="${aws}")),
             ("destroy guard removed", lambda r: r["aws_s3_bucket.files"]["lifecycle"][0].update(prevent_destroy=False)),
             ("NAT", lambda r: r.update({"aws_nat_gateway.unwanted": {}})),
+            ("high cardinality", lambda r: r["aws_cloudwatch_metric_alarm.ops_backlog"].update(dimensions={"user_id": "unsafe"})),
+            ("missing heartbeat healthy", lambda r: r["aws_cloudwatch_metric_alarm.ops_worker"].update(treat_missing_data="notBreaching")),
+            ("arbitrary remote shell", lambda r: r["aws_iam_role_policy.deploy"].update(policy="AWS-RunShellScript")),
         ]
         for label, mutate in cases:
             with self.subTest(label=label):

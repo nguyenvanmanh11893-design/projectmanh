@@ -1,3 +1,4 @@
+import { log } from '../utils/logger.js';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Op } from 'sequelize';
@@ -28,7 +29,7 @@ const createFileService = ({ FileModel = File, FolderModel = Folder, JobModel = 
     if (!originalName || originalName.length > 255) throw badRequest('File name must be between 1 and 255 characters');
     const s3Key = `users/${userId}/files/${fileId}-${originalName}`;
     try { await storage.uploadToS3({ buffer: file.buffer, key: s3Key, mimeType: file.mimetype || 'application/octet-stream' }); }
-    catch (error) { console.error('[S3 UPLOAD FAILED]', error); throw new AppError('File upload failed', { statusCode: 502, code: 'STORAGE_UPLOAD_FAILED' }); }
+    catch (error) { log('storage_upload_failed', {}, 'error'); throw new AppError('File upload failed', { statusCode: 502, code: 'STORAGE_UPLOAD_FAILED' }); }
     return sequelizeInstance.transaction(async (transaction) => {
       // Serialize metadata insertion with empty-folder deletion. S3 has already
       // succeeded; a concurrent delete leaves only an orphan for later reconciliation.
@@ -78,7 +79,7 @@ const createFileService = ({ FileModel = File, FolderModel = Folder, JobModel = 
       if (!file.s3_version_id || file.s3_version_id === 'null') throw new Error('Missing immutable object version');
       const downloadUrl = await storage.generatePresignedDownloadUrl({ key: file.s3_key, versionId: file.s3_version_id, originalName: file.original_name, expiresInSeconds: 300 });
       return { file_id: file.id, file_name: file.file_name, download_url: downloadUrl, expires_in: '5 minutes' };
-    } catch { console.error('[S3 PRESIGN FAILED]'); throw new AppError('Download is temporarily unavailable', { statusCode: 502, code: 'STORAGE_PRESIGN_FAILED' }); }
+    } catch { log('storage_presign_failed', {}, 'error'); throw new AppError('Download is temporarily unavailable', { statusCode: 502, code: 'STORAGE_PRESIGN_FAILED' }); }
   };
 
   const renameFile = async (userId, fileId, { file_name }, { requestId } = {}) => sequelizeInstance.transaction(async (transaction) => {
@@ -107,7 +108,7 @@ const createFileService = ({ FileModel = File, FolderModel = Folder, JobModel = 
     if (!file) throw notFound('File not found or access denied');
     if (file.status !== 'LEGACY_UNVERIFIED') throw new AppError('Versioned file deletion requires the lifecycle workflow', { statusCode: 409, code: 'FILE_LIFECYCLE_REQUIRED' });
     try { await storage.deleteFromS3({ key: file.s3_key }); }
-    catch (error) { console.error('[S3 DELETE FAILED]', error); throw new AppError('File deletion failed; metadata was retained', { statusCode: 502, code: 'STORAGE_DELETE_FAILED' }); }
+    catch (error) { log('storage_delete_failed', {}, 'error'); throw new AppError('File deletion failed; metadata was retained', { statusCode: 502, code: 'STORAGE_DELETE_FAILED' }); }
     await file.destroy();
     await recordAuditEvent({ AuditEventModel, userId, action: 'file.deleted', resourceType: 'file', resourceId: fileId, metadata: {}, requestId });
     return true;

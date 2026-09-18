@@ -8,7 +8,7 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "worker": "node src/worker.js",
-    "test": "node --import ./src/config/load-env.js --test",
+    "test": "node --test",
     "db:migrate": "node scripts/migrate.js up",
     "db:status": "node scripts/migrate.js status"
   },

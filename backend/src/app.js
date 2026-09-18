@@ -22,8 +22,18 @@ import storageRoutes from './routes/storage.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+import { sequelize } from './config/database.js';
+import { createReadiness } from './services/health.service.js';
 const app = express();
+app.locals.stopping = false;
+const ready = createReadiness(() => sequelize.authenticate(), { isStopping: () => app.locals.stopping });
 app.use(requestId);
+
+app.get('/health/live', (req, res) => res.json({ status: 'live' }));
+app.get('/health/ready', async (req, res) => {
+  const healthy = await ready();
+  res.status(healthy ? 200 : 503).json({ status: healthy ? 'ready' : 'unavailable' });
+});
 
 // Security Middlewares
 app.use(helmet({

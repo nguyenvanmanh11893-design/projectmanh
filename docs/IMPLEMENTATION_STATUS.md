@@ -2,7 +2,53 @@
 
 ## Current phase
 
-**Phase 9 IaC and deployment documentation implemented; NOT DEPLOYED.** Terraform formatting/validation and offline guardrails pass. The explicit backend unit/fault-injection suite passes 76/76. No Terraform plan/apply, AWS resource creation, live DB migration or deployment was performed. Phase 6B/7 runtime acceptance gaps remain; the existing frontend/workspace changes were preserved and are not claimed as work completed by this phase.
+**Phase 10A implemented; NOT DEPLOYED.** Local lint, 82 backend tests, 6 frontend tests, build, Terraform validation, HCL guards and Python release/bootstrap tests pass. Two opt-in MySQL tests were skipped; GitHub Actions/AWS/Linux runtime acceptance has not run. No .env values were read, no live migrations/deploy/recovery, no commit/push or Phase 10B implementation occurred.
+
+## Phase 10A completed (2026-09-18)
+
+- Structured JSON API/worker/migration/Lambda logs, recursive redaction and safe fixed error events. SQL logging disabled; Nginx JSON access logs omit URI/query/headers. Server-generated request ID flows through async context, transaction-persisted jobs and worker audit; committed job logs expose job ID. Lambda-to-worker correlation uses deterministic report ID without changing report schema.
+- Added liveness/readiness with bounded shared DB probing and shutdown handling; worker DB-backed heartbeat, due backlog/dead/oldest-work samples and cancellation of late samples. API local probe service/timer detects a silent API; readiness never implies worker/S3/public TLS health.
+- CloudWatch dashboard/alarms cover API, EC2, RDS, Lambda, failure queue, worker and backlog. Agent collects RAM/root disk with InstanceId-only aggregate dimensions and namespace-scoped IAM. No user/file/request/job metric dimensions. Existing SNS and billing configuration retained, with confirmation/test-delivery instructions.
+- CI: lint, unit/disposable-MySQL integration, migration rerun, dependency high/critical gate, HCL security/mutation guards, Terraform validation, frontend build and checksum/full-commit-SHA application artifact with locked production dependencies. Tests no longer implicitly read .env; local migration/server startup keep opt-out dotenv loading for development.
+- Manual-only CD: explicit disabled-by-default Terraform/workflow gates, protected production OIDC subject, private versioned release bucket, narrow SSM document, input/provenance/checksum checks and serialized root-owned release controller. Migration is separate, activation checks schema/readiness/frontend/fresh worker heartbeat, local failure restores the prior artifact, and external HTTPS smoke follows. Migration failures keep services stopped; rollback never reverses schema/data.
+- Added all eight requested operational runbooks and detailed bootstrap/rollback/monitoring documentation. Current frontend/framework and business ownership rules preserved; only unused imports/variables were removed to satisfy lint.
+- Updated existing AWS SDK dependencies within declared major-version ranges after online audit found a critical transitive XML parser advisory. Final audit has no high/critical findings, but seven moderate findings remain (qs/Express/body-parser, React Router and uuid/Sequelize chains); no forced breaking framework/ORM changes were made.
+
+## Phase 10A files/modules changed
+
+- `backend/src/utils/logger.js`, `middleware/{request-id,error}.middleware.js`, `services/{health,worker-observability,audit,file,finalize-upload}.js` (service filenames use `.service.js` where applicable), `app.js`, `server.js`, `worker.js`, `models/Job.js`, `config/{database,load-env}.js`: logs, context, health, heartbeat and safe errors.
+- `backend/database/migrations/007-phase10a-correlation.js`, `backend/scripts/migrate.js`: nullable durable request ID and read-only schema gate. `backend/test/phase10a*.test.js`: redaction, async/HTTP correlation, readiness races/timeouts, heartbeat and opt-in real MySQL claim/fencing/correlation tests.
+- `infra/terraform/{observability,cd,iam}.tf`, `terraform.tfvars.example`, `infra/tests/check_infra.py`: metrics/dashboard/alarms, opt-in OIDC/artifact/SSM resources, bounded permissions and three new dangerous-mutation guards.
+- `.github/workflows/{ci,cd}.yml`, `deployment/phase10a/{artifact,cd,release,probe,test_release}.py`, probe service/timer: CI/manual release automation, SHA/checksum packaging, migration/deploy/rollback/smoke and failure tests.
+- `deployment/phase9/{launch.py,nginx.conf.example,cloudwatch-agent.json.example}`, `lambdas/s3-file-validator/index.js`: host environment/log/metric integration and safe validation correlation.
+- `eslint.config.mjs`, root/backend `package.json`, `package-lock.json`, `.env.example`: lint/dependency/configuration/test commands; small unused-code cleanup in quota/reconciliation and existing backend/frontend tests.
+- `docs/{OBSERVABILITY_CICD,RUNBOOKS,MIGRATIONS,IMPLEMENTATION_STATUS}.md`: operations, limits and executed evidence.
+
+## Phase 10A verification
+
+| Command/check | Result |
+| --- | --- |
+| `npm run lint` | Passed using ESLint; existing unused bindings/type-import rule corrected without behavior changes. |
+| `npm test` | Passed: backend 82 pass, 2 MySQL skip, 0 fail; frontend 6/6. Ran outside sandbox after spawn EPERM. No .env import, MySQL or AWS access. Local Node is 20.20.2; AWS SDK warns to upgrade, CI/runtime target Node 22. |
+| `npm run build` | Passed outside sandbox after esbuild spawn EPERM. Existing Ant Design bundle exceeds Vite's 500 KiB warning; no frontend redesign in this phase. |
+| `npm audit --audit-level=high` (online) | Exit 0 after AWS SDK update: 7 moderate, 0 high/critical. Initial online result had 29 findings including 1 critical; sandbox/cache-only audit was not accepted as evidence. |
+| Terraform 1.10.5 `fmt -recursive`, `fmt -check -recursive`, `validate -no-color` in `infra/terraform` | Passed using Phase 9 installed provider/cache. Fixed initial nested-block formatting error. No plan/apply/backend access. |
+| `PYTHONPATH=tmp/phase9-tools/python python infra/tests/check_infra.py` | Passed: 2 methods, 13 negative mutation subcases. Required elevated read access to existing parser installation. |
+| `python deployment/phase9/test_launch.py` | Passed: 3 tests; cloud calls mocked. |
+| `python -m unittest discover -s deployment/phase10a -p 'test_*.py'` | Passed: 6 tests, including archive creation/checksum/nested dependencies/.env rejection, path attacks, wrong/dirty SHA, CI provenance, migration stop-on-failure and rollback on smoke failure. Uses fixtures/mocks, not actual systemd/AWS. Required elevated temp-directory access on this Windows host. |
+| Workflow YAML parsed with installed `js-yaml`; `git diff --check` | Passed. YAML parse is not a real GitHub Actions run. |
+| Disposable MySQL migrations/real lock races, Linux artifact/runtime, GitHub/OIDC/SSM, CloudWatch Agent/alarms/SNS, Lambda deployment/replay, live S3/RDS/TLS | Not run: no authorized disposable MySQL/AWS/Linux targets; no docker/mysql command available locally. CI is configured to run MySQL tests, but this is not evidence they passed. |
+
+## Phase 10A limits / conditions for Phase 10B
+
+- Keep CD disabled until protected-environment reviewers/main branch, exact OIDC subject (including immutable-ID variant if used), role/output variables, Python 3.12+/Node 22 host bootstrap, SSM Agent ENV_VAR support, root-owned controller/current/releases and known-good compatible rollback artifact are reviewed. GitHub action major tags should be pinned to reviewed SHAs under production supply-chain policy.
+- Run the actual CI workflow, disposable MySQL migrations (including 007 and rerun), correlation/claim fencing tests and earlier Phase 6B/7 real lock/recovery/S3 acceptance. Local fixture success does not waive these gates.
+- Rehearse stage/migrate/deploy/failed-readiness/rollback on a disposable Linux environment. No deployable current-source SHA archive is claimed locally: these changes are uncommitted and the artifact builder refuses to label dirty tracked sources with HEAD.
+- Resolve or explicitly review the seven moderate dependency findings before production. ESLint 9 is a development tool and npm reports its support deprecation; review a supported lint-tool upgrade separately from application framework changes.
+- Confirm real CloudWatch metric dimensions/log delivery/missing-data alarms, RAM/disk, SNS subscriptions and notifications. Local readiness does not monitor public certificate expiry; follow certificate runbook. Alarm thresholds require workload tuning; backlog sampling scans retained jobs.
+- Shared EC2 role can read the separately provisioned migration parameter when CD is enabled; parameter separation is not process-level privilege isolation. This is documented, not presented as a separate security boundary.
+- Automatic rollback applies only after local smoke failure and to compatible artifacts. External HTTPS failure requires diagnosis/manual rollback dispatch. Incompatible migrations need reviewed forward-fix/restore and DB/S3 consistency planning; no migration rollback/recovery was implemented or executed.
+- Phase 10B may begin with the acceptance matrix and these unresolved environment gates explicitly recorded; do not declare production readiness or add Phase 10B features under this phase.
 
 ## Phase 9 completed (2026-09-18)
 

@@ -1,3 +1,4 @@
+import { log } from '../utils/logger.js';
 import { Sequelize } from 'sequelize';
 import { readFileSync } from 'node:fs';
 
@@ -12,7 +13,7 @@ const sequelize = new Sequelize(
     dialectOptions: process.env.DB_SSL_CA
       ? { ssl: { ca: readFileSync(process.env.DB_SSL_CA, 'utf8'), rejectUnauthorized: true, verifyIdentity: true } }
       : {},
-    logging: process.env.NODE_ENV === 'development' ? (msg) => console.log(`[DB LOG]: ${msg}`) : false,
+    logging: false,
     define: {
       timestamps: true,
       underscored: true, // Use snake_case column names in DB (created_at, updated_at)
@@ -34,10 +35,10 @@ const sequelize = new Sequelize(
 const testConnection = async () => {
   try {
     await sequelize.authenticate();
-    console.log('✅ Database connection established successfully.');
+    log('database_connected');
     return true;
   } catch (error) {
-    console.error('❌ Unable to connect to the database:', error.message);
+    log('database_unavailable', {}, 'error');
     return false;
   }
 };

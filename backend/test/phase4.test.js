@@ -5,7 +5,6 @@ import { createFolderService } from '../src/services/folder.service.js';
 import { createFileService } from '../src/services/file.service.js';
 
 const userA = '25f00dbf-4788-4b4b-8edc-e79877090f23';
-const userB = '3d7549e0-41a4-4d31-94c6-2d30b6e430ea';
 const transaction = { LOCK: { UPDATE: 'UPDATE' } };
 const db = { transaction: async (...args) => (typeof args[0] === 'function' ? args[0] : args[1])(transaction) };
 const audit = { create: async (row) => row };
