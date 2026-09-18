@@ -1,0 +1,205 @@
+import { createHash, randomUUID } from 'node:crypto';
+import { Op } from 'sequelize';
+import { sequelize, User, Folder, UploadSession, Job } from '../models/index.js';
+import { AppError, badRequest } from '../utils/app-error.js';
+
+export const DEFAULT_QUOTA_BYTES = 1024n * 1024n * 1024n;
+export const MAX_FILE_SIZE_BYTES = 50n * 1024n * 1024n;
+export const MAX_ACTIVE_UPLOAD_SESSIONS = 3;
+// UPLOADED is still quota-reserved: Phase 6B is responsible for validation,
+// finalization, and moving the reservation to used bytes.
+const ACTIVE_STATUSES = ['RESERVED', 'UPLOADING', 'UPLOADED'];
+// A source version waiting for validation must not be finalized by the Phase
+// 5A helper. Phase 6B will perform its own validated finalization transaction.
+const COMMITTABLE_STATUSES = ['RESERVED', 'UPLOADING'];
+
+const notFound = (message) => new AppError(message, { statusCode: 404, code: 'NOT_FOUND' });
+const conflict = (message, code = 'QUOTA_EXCEEDED') => new AppError(message, { statusCode: 409, code });
+const asBigInt = (value) => BigInt(String(value));
+const asDecimal = (value) => value.toString();
+const sessionTtlMs = () => {
+  const minutes = Number.parseInt(process.env.UPLOAD_SESSION_TTL_MINUTES || '15', 10);
+  return (Number.isInteger(minutes) && minutes >= 1 && minutes <= 60 ? minutes : 15) * 60 * 1000;
+};
+const payloadHash = ({ requested_size, declared_mime_type, folder_id }) => createHash('sha256')
+  .update(JSON.stringify({ requested_size: String(requested_size), declared_mime_type, folder_id: folder_id || null }))
+  .digest('hex');
+
+const createQuotaService = ({ sequelizeInstance = sequelize, UserModel = User, FolderModel = Folder, UploadSessionModel = UploadSession, JobModel = Job, now = () => new Date() } = {}) => {
+  const expireSessions = async (user, transaction, currentTime) => {
+    const expired = await UploadSessionModel.findAll({
+      where: { user_id: user.id, status: { [Op.in]: ACTIVE_STATUSES }, expires_at: { [Op.lte]: currentTime } },
+      transaction,
+      lock: transaction.LOCK.UPDATE
+    });
+    if (!expired.length) return;
+    const released = expired.reduce((total, session) => total + asBigInt(session.requested_size), 0n);
+    for (const session of expired) {
+      session.status = 'EXPIRED';
+      await session.save({ transaction });
+    }
+    if (asBigInt(user.reserved_bytes) < released) throw new Error('Quota invariant violated');
+    user.reserved_bytes = asDecimal(asBigInt(user.reserved_bytes) - released);
+    await user.save({ transaction });
+  };
+
+  const reserveQuota = async (userId, payload, idempotencyKey) => sequelizeInstance.transaction(async (transaction) => {
+    const currentTime = now();
+    const user = await UserModel.findByPk(userId, { transaction, lock: transaction.LOCK.UPDATE });
+    if (!user) throw notFound('User not found');
+    await expireSessions(user, transaction, currentTime);
+
+    const hash = payloadHash(payload);
+    const existing = await UploadSessionModel.findOne({ where: { user_id: userId, idempotency_key: idempotencyKey }, transaction, lock: transaction.LOCK.UPDATE });
+    if (existing) {
+      if (existing.payload_hash !== hash) throw conflict('Idempotency-Key was already used with a different payload', 'IDEMPOTENCY_CONFLICT');
+      return existing;
+    }
+
+    if (payload.folder_id && !await FolderModel.findOne({ where: { id: payload.folder_id, user_id: userId }, transaction, lock: transaction.LOCK.UPDATE })) {
+      throw notFound('Target folder not found or access denied');
+    }
+    const activeCount = await UploadSessionModel.count({
+      where: { user_id: userId, status: { [Op.in]: ACTIVE_STATUSES }, expires_at: { [Op.gt]: currentTime } },
+      transaction,
+      lock: transaction.LOCK.UPDATE
+    });
+    if (activeCount >= MAX_ACTIVE_UPLOAD_SESSIONS) throw conflict('Maximum of 3 active upload sessions reached', 'UPLOAD_SESSION_LIMIT_REACHED');
+
+    const requested = asBigInt(payload.requested_size);
+    const total = asBigInt(user.used_bytes) + asBigInt(user.reserved_bytes) + requested;
+    if (total > asBigInt(user.quota_bytes)) throw conflict('Storage quota would be exceeded');
+
+    const id = randomUUID();
+    const session = await UploadSessionModel.create({
+      id,
+      user_id: userId,
+      folder_id: payload.folder_id || null,
+      idempotency_key: idempotencyKey,
+      payload_hash: hash,
+      requested_size: asDecimal(requested),
+      declared_mime_type: payload.declared_mime_type,
+      // This is only an internal identifier. Phase 5B will bind it to a presigned POST.
+      incoming_key: `incoming/${userId}/${id}`,
+      status: 'RESERVED',
+      expires_at: new Date(currentTime.getTime() + sessionTtlMs())
+    }, { transaction });
+    user.reserved_bytes = asDecimal(asBigInt(user.reserved_bytes) + requested);
+    await user.save({ transaction });
+    return session;
+  });
+
+  const releaseQuota = async (userId, sessionId, { status = 'CANCELLED' } = {}) => sequelizeInstance.transaction(async (transaction) => {
+    const user = await UserModel.findByPk(userId, { transaction, lock: transaction.LOCK.UPDATE });
+    if (!user) throw notFound('User not found');
+    const session = await UploadSessionModel.findOne({ where: { id: sessionId, user_id: userId }, transaction, lock: transaction.LOCK.UPDATE });
+    if (!session) throw notFound('Upload session not found or access denied');
+    if (!ACTIVE_STATUSES.includes(session.status)) return session;
+    const requested = asBigInt(session.requested_size);
+    if (asBigInt(user.reserved_bytes) < requested) throw new Error('Quota invariant violated');
+    user.reserved_bytes = asDecimal(asBigInt(user.reserved_bytes) - requested);
+    session.status = status;
+    await Promise.all([user.save({ transaction }), session.save({ transaction })]);
+    return session;
+  });
+
+  const commitQuota = async (userId, sessionId) => sequelizeInstance.transaction(async (transaction) => {
+    const currentTime = now();
+    const user = await UserModel.findByPk(userId, { transaction, lock: transaction.LOCK.UPDATE });
+    if (!user) throw notFound('User not found');
+    await expireSessions(user, transaction, currentTime);
+    const session = await UploadSessionModel.findOne({ where: { id: sessionId, user_id: userId }, transaction, lock: transaction.LOCK.UPDATE });
+    if (!session) throw notFound('Upload session not found or access denied');
+    if (session.status === 'COMPLETED') return session;
+    if (!COMMITTABLE_STATUSES.includes(session.status)) throw conflict('Upload session is no longer active', 'UPLOAD_SESSION_NOT_ACTIVE');
+    const requested = asBigInt(session.requested_size);
+    if (asBigInt(user.reserved_bytes) < requested) throw new Error('Quota invariant violated');
+    user.reserved_bytes = asDecimal(asBigInt(user.reserved_bytes) - requested);
+    user.used_bytes = asDecimal(asBigInt(user.used_bytes) + requested);
+    session.status = 'COMPLETED';
+    session.completed_at = currentTime;
+    await Promise.all([user.save({ transaction }), session.save({ transaction })]);
+    return session;
+  });
+
+  const getUploadSession = async (userId, sessionId) => sequelizeInstance.transaction(async (transaction) => {
+    const user = await UserModel.findByPk(userId, { transaction, lock: transaction.LOCK.UPDATE });
+    if (!user) throw notFound('User not found');
+    await expireSessions(user, transaction, now());
+    const session = await UploadSessionModel.findOne({ where: { id: sessionId, user_id: userId }, transaction, lock: transaction.LOCK.UPDATE });
+    if (!session) throw notFound('Upload session not found or access denied');
+    return session;
+  });
+
+  const getUsage = async (userId) => sequelizeInstance.transaction(async (transaction) => {
+    const user = await UserModel.findByPk(userId, { transaction, lock: transaction.LOCK.UPDATE });
+    if (!user) throw notFound('User not found');
+    await expireSessions(user, transaction, now());
+    const quota = asBigInt(user.quota_bytes);
+    const used = asBigInt(user.used_bytes);
+    const reserved = asBigInt(user.reserved_bytes);
+    return { quota_bytes: asDecimal(quota), used_bytes: asDecimal(used), reserved_bytes: asDecimal(reserved), available_bytes: asDecimal(quota > used + reserved ? quota - used - reserved : 0n) };
+  });
+
+  // These two operations deliberately keep S3 calls outside the DB transaction.
+  // `bindSourceVersion` re-locks the row, making concurrent complete requests
+  // converge on one exact version.
+  const prepareDirectUpload = async (userId, sessionId) => {
+    const result = await sequelizeInstance.transaction(async (transaction) => {
+    const currentTime = now();
+    const user = await UserModel.findByPk(userId, { transaction, lock: transaction.LOCK.UPDATE });
+    if (!user) throw notFound('User not found');
+    await expireSessions(user, transaction, currentTime);
+    const session = await UploadSessionModel.findOne({ where: { id: sessionId, user_id: userId }, transaction, lock: transaction.LOCK.UPDATE });
+    if (!session) throw notFound('Upload session not found or access denied');
+    if (session.status === 'EXPIRED') return session;
+    if (session.source_version_id && ['UPLOADED', 'COMPLETED', 'REJECTED'].includes(session.status)) return session;
+    if (ACTIVE_STATUSES.includes(session.status)) return session;
+    throw conflict('Upload session is no longer active', 'UPLOAD_SESSION_NOT_ACTIVE');
+    });
+    if (result.status === 'EXPIRED') throw conflict('Upload session has expired', 'UPLOAD_SESSION_EXPIRED');
+    return result;
+  };
+
+  const bindSourceVersion = async (userId, sessionId, versionId) => {
+    const result = await sequelizeInstance.transaction(async (transaction) => {
+    const currentTime = now();
+    const user = await UserModel.findByPk(userId, { transaction, lock: transaction.LOCK.UPDATE });
+    if (!user) throw notFound('User not found');
+    await expireSessions(user, transaction, currentTime);
+    const session = await UploadSessionModel.findOne({ where: { id: sessionId, user_id: userId }, transaction, lock: transaction.LOCK.UPDATE });
+    if (!session) throw notFound('Upload session not found or access denied');
+    if (session.source_version_id && ['UPLOADED', 'COMPLETED', 'REJECTED'].includes(session.status)) {
+      if (session.source_version_id === versionId) return session;
+      throw conflict('A different object version has already been completed for this upload', 'UPLOAD_VERSION_CONFLICT');
+    }
+    if (session.status === 'EXPIRED') return session;
+    if (!ACTIVE_STATUSES.includes(session.status)) throw conflict('Upload session is no longer active', 'UPLOAD_SESSION_NOT_ACTIVE');
+    session.source_version_id = versionId;
+    session.status = 'UPLOADED';
+    session.completed_at = currentTime;
+    // Binding the source and making its durable work visible are one DB
+    // transaction. A process crash can therefore yield either neither change
+    // or an independently claimable finalization job, never a stranded upload.
+    const fileId = randomUUID();
+    await Promise.all([
+      session.save({ transaction }),
+      JobModel.create({
+        type: 'FINALIZE_UPLOAD', status: 'QUEUED',
+        payload: { upload_session_id: session.id, file_id: fileId },
+        dedupe_key: `finalize:${session.id}`,
+        attempts: 0, max_attempts: 10, run_at: currentTime, next_attempt_at: currentTime
+      }, { transaction })
+    ]);
+    return session;
+    });
+    if (result.status === 'EXPIRED') throw conflict('Upload session has expired', 'UPLOAD_SESSION_EXPIRED');
+    return result;
+  };
+
+  return { reserveQuota, releaseQuota, commitQuota, getUploadSession, getUsage, prepareDirectUpload, bindSourceVersion };
+};
+
+const quotaService = createQuotaService();
+export const { reserveQuota, releaseQuota, commitQuota, getUploadSession, getUsage, prepareDirectUpload, bindSourceVersion } = quotaService;
+export { createQuotaService };
