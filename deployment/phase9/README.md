@@ -2,6 +2,21 @@
 
 This is an **undeployed** configuration. Phase 9 does not authorize `terraform apply`, AWS resource creation, migrations against a live database, or a deployment. Commands below that change infrastructure/hosts are for a later, explicitly authorized deployment. Use this guide instead of the historical `deployment/AWS_EC2_DEPLOYMENT.md` (local MySQL/PM2/HTTP instructions do not describe this architecture).
 
+## Quick orientation
+
+This runbook describes a cost-conscious, single-host AWS deployment in Singapore: public Nginx/EC2 runs the React frontend, API, and worker; RDS remains private; browsers transfer files through presigned S3 requests; an S3-triggered Lambda validates uploads; and SQS/SNS/CloudWatch support failure handling and operations. Terraform defines the resources, while secret bootstrap, database migration, host installation, DNS, TLS, and release activation remain explicit operator procedures.
+
+Recommended reading order:
+
+1. Review **Architecture and repository assumptions**, especially the Single-AZ and no-HA limits.
+2. Complete **Local preparation** without AWS writes.
+3. Establish the protected Terraform state and review a real plan under separate authorization.
+4. Follow **Secret bootstrap, identities and database**, then **Host installation, DNS and HTTPS**.
+5. Complete every item in **Acceptance and next-phase gates** before making any production-readiness claim.
+6. Keep the teardown checklist for an eventual separately approved retirement operation; never use a blind destroy.
+
+Related sources: [`docs/IMPLEMENTATION_STATUS.md`](../../docs/IMPLEMENTATION_STATUS.md) records current evidence and open gates; [`docs/OBSERVABILITY_CICD.md`](../../docs/OBSERVABILITY_CICD.md) documents Phase 10A monitoring and delivery; [`docs/RUNBOOKS.md`](../../docs/RUNBOOKS.md) contains incident procedures.
+
 ## Architecture and repository assumptions
 
 Terraform lives in `infra/terraform`. Singapore (`ap-southeast-1`) hosts VPC `10.0.0.0/16`, EC2/Nginx/API/worker, private RDS, S3, Lambda, SQS and operational SNS. Billing alarm/SNS and account-wide monthly Budget use the `us-east-1` provider. Nothing introduces NAT Gateway, ALB, ECS, API Gateway, Redis or DynamoDB.
